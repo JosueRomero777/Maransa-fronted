@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1">
+      <stop offset="0" stop-color="#ff8a00"/>
+      <stop offset="1" stop-color="#ff3d00"/>
+    </linearGradient>
+  </defs>
+  <rect width="200" height="120" rx="12" fill="#fff"/>
+  <g transform="translate(10,20)">
+    <path d="M20 40 C35 10, 85 10, 100 40 C110 65, 140 70, 170 50" fill="none" stroke="url(#g)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="30" cy="30" r="6" fill="#004c6d"/>
+    <circle cx="75" cy="26" r="4" fill="#004c6d"/>
+    <path d="M24 44 L12 54" stroke="#004c6d" stroke-width="3" stroke-linecap="round"/>
+    <path d="M40 46 L36 60" stroke="#004c6d" stroke-width="3" stroke-linecap="round"/>
+  </g>
+  <text x="12" y="105" font-family="sans-serif" font-size="14" fill="#0077b6">Maransa</text>
+</svg>
