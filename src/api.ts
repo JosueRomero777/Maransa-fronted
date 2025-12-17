@@ -22,6 +22,10 @@ export const api = {
   createProvider: (data: object) => request('/providers', { method: 'POST', body: JSON.stringify(data) }),
   updateProvider: (id: number, data: object) => request(`/providers/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteProvider: (id: number) => request(`/providers/${id}`, { method: 'DELETE' }),
+  checkProviderName: (name: string, excludeId?: number) => {
+    const params = excludeId ? `?excludeId=${excludeId}` : '';
+    return request(`/providers/check-name/${encodeURIComponent(name)}${params}`);
+  },
 };
 
 export default api;

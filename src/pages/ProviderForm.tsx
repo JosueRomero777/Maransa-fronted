@@ -1,144 +1,495 @@
 import { useEffect, useState } from 'react';
-import { api } from '../api';
+import { providerService } from '../services/provider.service';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useForm, Controller } from 'react-hook-form';
+import { yupResolver } from '@hookform/resolvers/yup';
+import * as yup from 'yup';
 import {
-  TextInput,
-  Textarea,
-  NumberInput,
-  Button,
-  Group,
+  Box,
   Card,
-  Title,
-  Loader,
-  Divider,
+  CardContent,
+  Typography,
+  TextField,
+  Button,
+  Grid,
+  Container,
   Paper,
-  Text,
-} from '@mantine/core';
-import { useForm } from '@mantine/form';
+  CircularProgress,
+  Alert,
+  Divider,
+  Stack,
+  FormControlLabel,
+  Switch,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  InputAdornment,
+} from '@mui/material';
+import {
+  Save as SaveIcon,
+  ArrowBack as ArrowBackIcon,
+} from '@mui/icons-material';
 
-type FormState = {
-  name: string;
-  type?: string;
-  location?: string;
-  capacity?: number | null;
-  contact_whatsapp?: string;
-  contact_email?: string;
-  contact_phone?: string;
-  notes?: string;
+// Enum for provider types (matching backend)
+export enum TipoProveedor {
+  PEQUENA_CAMARONERA = 'PEQUENA_CAMARONERA',
+  MEDIANA_CAMARONERA = 'MEDIANA_CAMARONERA', 
+  GRAN_CAMARONERA = 'GRAN_CAMARONERA'
+}
+
+// Options for the select dropdown
+const tipoProveedorOptions = [
+  { value: TipoProveedor.PEQUENA_CAMARONERA, label: 'Pequeña Camaronera' },
+  { value: TipoProveedor.MEDIANA_CAMARONERA, label: 'Mediana Camaronera' },
+  { value: TipoProveedor.GRAN_CAMARONERA, label: 'Gran Camaronera' }
+];
+
+// Parse backend errors into user-friendly messages
+const parseErrorMessage = (error: any): string => {
+  if (typeof error === 'string') {
+    // Handle common backend validation messages
+    if (error.includes('contact_email must be an email')) {
+      return 'Por favor, ingresa un email válido (ejemplo: usuario@dominio.com)';
+    }
+    if (error.includes('Bad Request')) {
+      return 'Los datos enviados no son válidos. Por favor, revisa la información.';
+    }
+    return error;
+  }
+  
+  // Handle error objects
+  if (error?.message) {
+    if (error.message.includes('contact_email must be an email')) {
+      return 'Por favor, ingresa un email válido (ejemplo: usuario@dominio.com)';
+    }
+    return error.message;
+  }
+  
+  // Default fallback
+  return 'Ocurrió un error inesperado. Por favor, intenta nuevamente.';
 };
+
+// Validation schema with async name validation
+const validationSchema = yup.object().shape({
+  name: yup
+    .string()
+    .required('Nombre es requerido')
+    .trim()
+    .test('unique-name', 'Ya existe un proveedor con este nombre', async function(value) {
+      if (!value) return true; // Let required validation handle this
+      
+      try {
+        // Get the current form context to access editId
+        const editId = (this.options.context as any)?.editId;
+        const response = await providerService.checkNameAvailability(value, editId);
+        return !response.isDuplicate;
+      } catch (error) {
+        console.error('Error validating name:', error);
+        // If API fails, allow the validation to pass to avoid blocking the form
+        return true;
+      }
+    }),
+  type: yup.string().oneOf(Object.values(TipoProveedor), 'Tipo de proveedor es requerido').required('Tipo es requerido'),
+  location: yup.string().required('Ubicación es requerida').trim(),
+  capacity: yup.number().required('Capacidad es requerida').min(1, 'La capacidad debe ser mayor a 0'),
+  contact_email: yup
+    .string()
+    .transform((value) => value === '' ? undefined : value)
+    .optional()
+    .test('email', 'Por favor, ingresa un email válido (ejemplo: usuario@dominio.com)', 
+      (value) => !value || yup.string().email().isValidSync(value)),
+  contact_phone: yup
+    .string()
+    .transform((value) => value === '' ? undefined : value)
+    .optional()
+    .test('phone', 'Número de teléfono inválido', 
+      (value) => !value || /^\+?[0-9 ()-]{6,20}$/.test(value)),
+  contact_whatsapp: yup
+    .string()
+    .required('WhatsApp es requerido')
+    .matches(/^\+?[0-9 ()-]{6,20}$/, 'Número de WhatsApp inválido'),
+  notes: yup.string().optional(),
+  active: yup.boolean().default(true),
+});
+
+type FormData = yup.InferType<typeof validationSchema>;
 
 export default function ProviderForm() {
   const { id } = useParams();
   const editId = id ? Number(id) : null;
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const [validatingName, setValidatingName] = useState(false);
 
-  const form = useForm<FormState>({
-    initialValues: {
+  const {
+    control,
+    handleSubmit,
+    setValue,
+    formState: { errors, isSubmitting },
+  } = useForm<FormData>({
+    resolver: yupResolver(validationSchema),
+    context: { editId },
+    defaultValues: {
       name: '',
-      type: '',
+      type: TipoProveedor.PEQUENA_CAMARONERA,
       location: '',
-      capacity: null,
+      capacity: 0,
       contact_whatsapp: '',
       contact_email: '',
       contact_phone: '',
       notes: '',
-    },
-    validate: {
-      name: (value) => (value.trim().length === 0 ? 'Nombre requerido' : null),
-      contact_email: (value) => (value && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value) ? 'Email inválido' : null),
+      active: true,
     },
   });
 
   useEffect(() => {
     if (!editId) return;
     setLoading(true);
-    api
+    providerService
       .getProvider(editId)
       .then((data) => {
-        // adapt null/undefined values
-        form.setValues({
-          name: data.name || '',
-          type: data.type || '',
-          location: data.location || '',
-          capacity: data.capacity ?? null,
-          contact_whatsapp: data.contact_whatsapp || '',
-          contact_email: data.contact_email || '',
-          contact_phone: data.contact_phone || '',
-          notes: data.notes || '',
-        });
+        setValue('name', data.name || '');
+        setValue('type', data.type || '');
+        setValue('location', data.location || '');
+        setValue('capacity', data.capacity ?? 0);
+        setValue('contact_whatsapp', data.contact_whatsapp || '');
+        setValue('contact_email', data.contact_email || '');
+        setValue('contact_phone', data.contact_phone || '');
+        setValue('notes', data.notes || '');
+        setValue('active', data.active ?? true);
       })
-      .catch((err) => alert(String(err)))
+      .catch((err) => setError(String(err)))
       .finally(() => setLoading(false));
-  }, [editId]);
+  }, [editId, setValue]);
 
-  const handleSubmit = async (values: FormState) => {
+  const onSubmit = async (data: FormData) => {
     try {
-      if (editId) await api.updateProvider(editId, values as any);
-      else await api.createProvider(values as any);
-      navigate('/providers');
+      setError(null);
+      setSuccess(false);
+      
+      // Clean empty string fields to avoid backend validation issues
+      const cleanData = {
+        ...data,
+        name: data.name.trim(),
+        type: data.type,
+        location: data.location.trim(),
+        contact_whatsapp: data.contact_whatsapp.trim(),
+        contact_email: data.contact_email?.trim() || undefined,
+        contact_phone: data.contact_phone?.trim() || undefined,
+        notes: data.notes?.trim() || undefined,
+      };
+      
+      if (editId) {
+        await providerService.updateProvider(editId, cleanData);
+      } else {
+        await providerService.createProvider(cleanData);
+      }
+      
+      setSuccess(true);
+      
+      // Navigate after a short delay to show success message
+      setTimeout(() => {
+        navigate('/providers');
+      }, 1500);
     } catch (err) {
-      alert(String(err));
+      console.error('Form submission error:', err);
+      setError(parseErrorMessage(err));
     }
   };
 
   return (
-    <div>
-      <div style={{ maxWidth: 720, width: '100%', margin: '0 auto', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 16 }}>
-        <Title order={2} style={{ margin: 0 }}>{editId ? 'Editar proveedor' : 'Nuevo proveedor'}</Title>
-      </div>
+    <Container maxWidth="md" sx={{ py: 3 }}>
+      {/* Header */}
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 4 }}>
+        <Button
+          startIcon={<ArrowBackIcon />}
+          onClick={() => navigate('/providers')}
+          sx={{ mr: 2, textTransform: 'none' }}
+        >
+          Volver
+        </Button>
+        <Typography variant="h4" component="h1" sx={{ fontWeight: 600 }}>
+          {editId ? 'Editar Proveedor' : 'Nuevo Proveedor'}
+        </Typography>
+      </Box>
 
+      {/* Error Alert */}
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
+
+      {/* Success Alert */}
+      {success && (
+        <Alert severity="success" sx={{ mb: 3 }}>
+          ¡Proveedor {editId ? 'actualizado' : 'creado'} exitosamente! Redirigiendo...
+        </Alert>
+      )}
+
+      {/* Loading */}
       {loading ? (
-        <Loader />
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+          <CircularProgress size={40} />
+        </Box>
       ) : (
-        <Paper shadow="md" radius="md" p="xl" style={{ maxWidth: 720, width: '100%', margin: '0 auto' }}>
-          <form onSubmit={form.onSubmit(handleSubmit)}>
-            <Card shadow="none" p={0}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
-                <div style={{ flex: 1 }}>
-                  <Text size="sm" color="dimmed">Rellena la información principal del proveedor</Text>
-                  <TextInput label="Nombre" required placeholder="Nombre del proveedor" variant="filled" radius="md" size="md" {...form.getInputProps('name')} />
+        <Paper elevation={2} sx={{ p: 4, borderRadius: 2 }}>
+          <form onSubmit={handleSubmit(onSubmit)}>
+            <Stack spacing={4}>
+              {/* Información básica */}
+              <Box>
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+                  Información Básica
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  Datos principales del proveedor
+                </Typography>
+                
+                <Grid container spacing={3}>
+                  <Grid item xs={12}>
+                    <Controller
+                      name="name"
+                      control={control}
+                      render={({ field }) => (
+                        <TextField
+                          {...field}
+                          fullWidth
+                          label="Nombre del Proveedor"
+                          placeholder="Ingrese el nombre del proveedor"
+                          error={!!errors.name}
+                          helperText={
+                            errors.name?.message || 
+                            'Nombre único del proveedor (se validará automáticamente)'
+                          }
+                          required
+                          InputProps={{
+                            endAdornment: validatingName ? (
+                              <CircularProgress size={20} />
+                            ) : null,
+                          }}
+                        />
+                      )}
+                    />
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6}>
+                    <Controller
+                      name="type"
+                      control={control}
+                      render={({ field }) => (
+                        <FormControl fullWidth error={!!errors.type} required>
+                          <InputLabel>Tipo de Proveedor</InputLabel>
+                          <Select
+                            {...field}
+                            label="Tipo de Proveedor"
+                          >
+                            {tipoProveedorOptions.map((option) => (
+                              <MenuItem key={option.value} value={option.value}>
+                                {option.label}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                          {errors.type && (
+                            <Typography variant="caption" color="error" sx={{ mt: 0.5, mx: 1.75 }}>
+                              {errors.type.message}
+                            </Typography>
+                          )}
+                        </FormControl>
+                      )}
+                    />
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6}>
+                    <Controller
+                      name="location"
+                      control={control}
+                      render={({ field }) => (
+                        <TextField
+                          {...field}
+                          fullWidth
+                          label="Ubicación"
+                          placeholder="Ciudad / Región"
+                          error={!!errors.location}
+                          helperText={errors.location?.message}
+                          required
+                        />
+                      )}
+                    />
+                  </Grid>
+                </Grid>
+              </Box>
 
-                  <div style={{ display: 'flex', gap: 32, justifyContent: 'center' }}>
-                    <TextInput style={{ flex: 1, minWidth: 220 }} label="Tipo" placeholder="e.g. Procesador, Distribuidor" variant="filled" radius="md" {...form.getInputProps('type')} />
-                    <TextInput style={{ flex: 1, minWidth: 220 }} label="Ubicación" placeholder="Ciudad / Región" variant="filled" radius="md" {...form.getInputProps('location')} />
-                  </div>
-                </div>
-              </div>
+              <Divider />
 
-              <Divider my="lg" />
+              {/* Contacto y Capacidad */}
+              <Box>
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+                  Contacto y Capacidad
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  Información de contacto y capacidad de manejo
+                </Typography>
+                
+                <Grid container spacing={3}>
+                  <Grid item xs={12} sm={6}>
+                    <Controller
+                      name="capacity"
+                      control={control}
+                      render={({ field: { onChange, value, ...field } }) => (
+                        <TextField
+                          {...field}
+                          fullWidth
+                          type="number"
+                          label="Capacidad (libras)"
+                          placeholder="1000"
+                          value={value || ''}
+                          onChange={(e) => onChange(e.target.value ? Number(e.target.value) : 0)}
+                          error={!!errors.capacity}
+                          helperText={errors.capacity?.message || 'Capacidad de manejo en libras'}
+                          InputProps={{
+                            inputProps: { min: 1 }
+                          }}
+                          required
+                        />
+                      )}
+                    />
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6}>
+                    <Controller
+                      name="contact_whatsapp"
+                      control={control}
+                      render={({ field }) => (
+                        <TextField
+                          {...field}
+                          fullWidth
+                          label="WhatsApp"
+                          placeholder="+51 999 999 999"
+                          error={!!errors.contact_whatsapp}
+                          helperText={errors.contact_whatsapp?.message || 'Número de WhatsApp principal'}
+                          required
+                        />
+                      )}
+                    />
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6}>
+                    <Controller
+                      name="contact_email"
+                      control={control}
+                      render={({ field }) => (
+                        <TextField
+                          {...field}
+                          fullWidth
+                          type="email"
+                          label="Email"
+                          placeholder="ejemplo@empresa.com"
+                          error={!!errors.contact_email}
+                          helperText={errors.contact_email?.message || 'Email de contacto del proveedor'}
+                        />
+                      )}
+                    />
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6}>
+                    <Controller
+                      name="contact_phone"
+                      control={control}
+                      render={({ field }) => (
+                        <TextField
+                          {...field}
+                          fullWidth
+                          label="Teléfono"
+                          placeholder="(01) 234-5678"
+                          error={!!errors.contact_phone}
+                          helperText={errors.contact_phone?.message}
+                        />
+                      )}
+                    />
+                  </Grid>
+                </Grid>
+              </Box>
 
-              <div>
-                <Title order={4}>Contacto y capacidad</Title>
-                <Text size="sm" color="dimmed">Información de contacto y capacidad de manejo.</Text>
+              <Divider />
 
-                <div style={{ display: 'flex', gap: 32, justifyContent: 'center' }}>
-                  <NumberInput style={{ flex: 1, minWidth: 220 }} label="Capacidad (libras)" min={0} placeholder="0" variant="filled" radius="md" {...form.getInputProps('capacity')} />
-                  <TextInput style={{ flex: 1, minWidth: 220 }} label="WhatsApp" placeholder="+51 999 999 999" variant="filled" radius="md" {...form.getInputProps('contact_whatsapp')} />
-                </div>
+              {/* Notas y Estado */}
+              <Box>
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+                  Información Adicional
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                  Notas y configuración del proveedor
+                </Typography>
+                
+                <Grid container spacing={3}>
+                  <Grid item xs={12}>
+                    <Controller
+                      name="notes"
+                      control={control}
+                      render={({ field }) => (
+                        <TextField
+                          {...field}
+                          fullWidth
+                          multiline
+                          rows={4}
+                          label="Notas"
+                          placeholder="Comentarios internos o indicaciones especiales..."
+                          error={!!errors.notes}
+                          helperText={errors.notes?.message}
+                        />
+                      )}
+                    />
+                  </Grid>
+                  
+                  <Grid item xs={12}>
+                    <Controller
+                      name="active"
+                      control={control}
+                      render={({ field: { value, onChange, ...field } }) => (
+                        <FormControlLabel
+                          {...field}
+                          control={
+                            <Switch
+                              checked={value}
+                              onChange={onChange}
+                              color="primary"
+                            />
+                          }
+                          label="Proveedor activo"
+                        />
+                      )}
+                    />
+                  </Grid>
+                </Grid>
+              </Box>
 
-                <div style={{ display: 'flex', gap: 32, justifyContent: 'center' }}>
-                  <TextInput style={{ flex: 1, minWidth: 220 }} label="Email" placeholder="correo@ejemplo.com" variant="filled" radius="md" {...form.getInputProps('contact_email')} />
-                  <TextInput style={{ flex: 1, minWidth: 220 }} label="Teléfono" placeholder="(01) 234-5678" variant="filled" radius="md" {...form.getInputProps('contact_phone')} />
-                </div>
-              </div>
-
-              <Divider my="lg" />
-
-              <div>
-                <Title order={4}>Notas</Title>
-                <Text size="sm" color="dimmed">Comentarios internos o indicaciones especiales.</Text>
-                <Textarea placeholder="Notas adicionales" minRows={4} variant="filled" radius="md" {...form.getInputProps('notes')} />
-              </div>
-
-              <Group style={{ justifyContent: 'flex-end' }} spacing="sm">
-                <Button variant="outline" color="gray" onClick={() => navigate('/providers')}>Cancelar</Button>
-                <Button type="submit">Guardar proveedor</Button>
-              </Group>
-            </Card>
+              {/* Actions */}
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, pt: 2 }}>
+                <Button
+                  variant="outlined"
+                  onClick={() => navigate('/providers')}
+                  disabled={isSubmitting}
+                  sx={{ textTransform: 'none' }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  variant="contained"
+                  startIcon={isSubmitting ? <CircularProgress size={20} /> : <SaveIcon />}
+                  disabled={isSubmitting}
+                  sx={{ textTransform: 'none' }}
+                >
+                  {isSubmitting ? 'Guardando...' : 'Guardar Proveedor'}
+                </Button>
+              </Box>
+            </Stack>
           </form>
         </Paper>
       )}
-    </div>
+    </Container>
   );
 }
