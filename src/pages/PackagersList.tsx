@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { providerService } from '../services/provider.service';
+import { packagerService } from '../services/packager.service';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context';
 import {
@@ -28,10 +28,6 @@ import {
   Collapse,
   Stack,
   Divider,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Select,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -42,49 +38,8 @@ import {
   Clear as ClearIcon,
 } from '@mui/icons-material';
 import { styled, alpha } from '@mui/material/styles';
-import { useSelectedProvider } from '../contexts/SelectedProviderContext';
-
-// Enum for provider types (matching backend)
-export enum TipoProveedor {
-  PEQUENA_CAMARONERA = 'PEQUENA_CAMARONERA',
-  MEDIANA_CAMARONERA = 'MEDIANA_CAMARONERA', 
-  GRAN_CAMARONERA = 'GRAN_CAMARONERA'
-}
-
-// Helper function to get friendly names
-const getTipoProveedorLabel = (tipo?: string): string => {
-  switch (tipo) {
-    case TipoProveedor.PEQUENA_CAMARONERA:
-      return 'Pequeña Camaronera';
-    case TipoProveedor.MEDIANA_CAMARONERA:
-      return 'Mediana Camaronera';
-    case TipoProveedor.GRAN_CAMARONERA:
-      return 'Gran Camaronera';
-    default:
-      return tipo || '';
-  }
-};
-
-// Options for the type filter
-const tipoProveedorFilterOptions = [
-  { value: '', label: 'Todos los tipos' },
-  { value: TipoProveedor.PEQUENA_CAMARONERA, label: 'Pequeña Camaronera' },
-  { value: TipoProveedor.MEDIANA_CAMARONERA, label: 'Mediana Camaronera' },
-  { value: TipoProveedor.GRAN_CAMARONERA, label: 'Gran Camaronera' }
-];
-
-type Provider = {
-  id: number;
-  name: string;
-  type?: string;
-  location?: string;
-  capacity?: number;
-  contact_whatsapp?: string;
-  contact_email?: string;
-  contact_phone?: string;
-  notes?: string;
-  active?: boolean;
-};
+import type { Packager } from '../types/packager.types';
+import { useSelectedPackager } from '../contexts/SelectedPackagerContext';
 
 const StyledCard = styled(Card)(({ theme, selected }: { theme?: any; selected: boolean }) => ({
   cursor: 'pointer',
@@ -118,8 +73,8 @@ const SearchTextField = styled(TextField)(({ theme }) => ({
   },
 }));
 
-export default function ProvidersList() {
-  const [providers, setProviders] = useState<Provider[]>([]);
+export default function PackagersList() {
+  const [packagers, setPackagers] = useState<Packager[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
@@ -127,9 +82,7 @@ export default function ProvidersList() {
   // Filtros
   const [filters, setFilters] = useState({
     search: '',
-    type: '',
     location: '',
-    minCapacity: '',
   });
   const [activeOnly, setActiveOnly] = useState(true);
   
@@ -144,46 +97,50 @@ export default function ProvidersList() {
   const [actionError, setActionError] = useState<string | null>(null);
   
   const navigate = useNavigate();
-  const { selected, setSelected } = useSelectedProvider();
+  const { selected, setSelected } = useSelectedPackager();
   const { user } = useAuth();
 
   // Permisos basados en roles
-  const canCreate = user?.role === 'ADMIN' || user?.role === 'COMPRAS';
-  const canEdit = user?.role === 'ADMIN' || user?.role === 'COMPRAS';
+  const canCreate = user?.role === 'ADMIN' || user?.role === 'EMPACADORA';
+  const canEdit = user?.role === 'ADMIN' || user?.role === 'EMPACADORA';
   const canDelete = user?.role === 'ADMIN';
 
   useEffect(() => {
     setLoading(true);
-    providerService
-      .listProviders()
-      .then((data) => setProviders(data || []))
+    packagerService
+      .listPackagers()
+      .then((data) => {
+        // Asegurar que siempre sea un array
+        if (Array.isArray(data)) {
+          setPackagers(data);
+        } else if (data && Array.isArray(data.data)) {
+          setPackagers(data.data);
+        } else {
+          setPackagers([]);
+        }
+      })
       .catch((err) => setError(String(err)))
       .finally(() => setLoading(false));
   }, []);
 
   // Filtrado y paginación
-  const filteredProviders = providers.filter((p) => {
+  const filteredPackagers = Array.isArray(packagers) ? packagers.filter((p) => {
     if (activeOnly && !p.active) return false;
     if (filters.search) {
       const s = filters.search.toLowerCase();
-      const searchFields = [p.name, p.type, p.location].filter(Boolean);
+      const searchFields = [p.name, p.location, p.ruc].filter(Boolean);
       if (!searchFields.some(field => field!.toLowerCase().includes(s))) return false;
     }
-    if (filters.type && p.type !== filters.type) return false;
     if (filters.location && !(p.location || '').toLowerCase().includes(filters.location.toLowerCase())) return false;
-    if (filters.minCapacity) {
-      const min = Number(filters.minCapacity);
-      if (!Number.isNaN(min) && (p.capacity ?? 0) < min) return false;
-    }
     return true;
-  });
+  }) : [];
 
-  const totalPages = Math.max(1, Math.ceil(filteredProviders.length / pageSize));
-  const paginatedProviders = filteredProviders.slice((page - 1) * pageSize, page * pageSize);
+  const totalPages = Math.max(1, Math.ceil(filteredPackagers.length / pageSize));
+  const paginatedPackagers = filteredPackagers.slice((page - 1) * pageSize, page * pageSize);
 
-  const askDelete = (id: number, name?: string) => {
+  const askDelete = (id: number, name: string) => {
     setDeletingId(id);
-    setDeletingName(name || null);
+    setDeletingName(name);
     setActionError(null);
     setConfirmOpen(true);
   };
@@ -191,20 +148,20 @@ export default function ProvidersList() {
   const confirmDelete = async () => {
     if (!deletingId) return;
     try {
-      await providerService.deleteProvider(deletingId);
-      setProviders((p) => p.filter((x) => x.id !== deletingId));
+      await packagerService.deletePackager(deletingId);
+      setPackagers((p) => p.filter((x) => x.id !== deletingId));
       if (selected && selected.id === deletingId) setSelected(null);
       setConfirmOpen(false);
       setDeletingId(null);
       setDeletingName(null);
     } catch (err) {
-      console.error('[ProvidersList] delete error', err);
+      console.error('[PackagersList] delete error', err);
       setActionError(String(err));
     }
   };
 
   const clearFilters = () => {
-    setFilters({ search: '', type: '', location: '', minCapacity: '' });
+    setFilters({ search: '', location: '' });
     setActiveOnly(true);
     setPage(1);
   };
@@ -216,12 +173,12 @@ export default function ProvidersList() {
       {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: { xs: 'flex-start', md: 'center' }, mb: 3, flexDirection: { xs: 'column', md: 'row' }, gap: { xs: 2, md: 0 } }}>
         <Typography variant="h4" component="h1" sx={{ fontWeight: 600, color: 'text.primary', fontSize: { xs: '1.5rem', md: '2rem' } }}>
-          Proveedores
+          Empacadoras
         </Typography>
         {canCreate && (
           <Button
             component={Link}
-            to="/providers/new"
+            to="/packagers/new"
             variant="contained"
             startIcon={<AddIcon />}
             size={window.innerWidth < 600 ? 'medium' : 'large'}
@@ -233,7 +190,7 @@ export default function ProvidersList() {
               width: { xs: '100%', md: 'auto' }
             }}
           >
-            Nuevo Proveedor
+            Nueva Empacadora
           </Button>
         )}
       </Box>
@@ -244,7 +201,7 @@ export default function ProvidersList() {
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexDirection: { xs: 'column', sm: 'row' } }}>
             <SearchTextField
               fullWidth
-              placeholder="Buscar por nombre, tipo o ubicación..."
+              placeholder="Buscar por nombre, RUC o ubicación..."
               value={filters.search}
               onChange={(e) => {
                 setFilters({ ...filters, search: e.target.value });
@@ -290,39 +247,10 @@ export default function ProvidersList() {
             <Divider sx={{ my: 2 }} />
             <Box sx={{ 
               display: 'grid',
-              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
+              gridTemplateColumns: { xs: '1fr', sm: '1fr' },
               gap: 2,
               alignItems: 'center'
             }}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Tipo</InputLabel>
-                <Select
-                  value={filters.type}
-                  label="Tipo"
-                  onChange={(e) => {
-                    setFilters({ ...filters, type: e.target.value });
-                    setPage(1);
-                  }}
-                >
-                  {tipoProveedorFilterOptions.map((option) => (
-                    <MenuItem key={option.value} value={option.value}>
-                      {option.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <TextField
-                fullWidth
-                label="Capacidad mínima"
-                placeholder="Ej: 1000"
-                type="number"
-                value={filters.minCapacity}
-                onChange={(e) => {
-                  setFilters({ ...filters, minCapacity: e.target.value });
-                  setPage(1);
-                }}
-                size="small"
-              />
               <FormControlLabel
                 control={
                   <Switch
@@ -351,14 +279,14 @@ export default function ProvidersList() {
 
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>
-          Error al cargar proveedores: {error}
+          Error al cargar empacadoras: {error}
         </Alert>
       )}
 
       {/* Lista de proveedores */}
       {!loading && !error && (
         <>
-          {paginatedProviders.length === 0 ? (
+          {paginatedPackagers.length === 0 ? (
             <Paper 
               elevation={1} 
               sx={{ 
@@ -369,10 +297,10 @@ export default function ProvidersList() {
               }}
             >
               <Typography variant="h6" color="text.secondary" gutterBottom>
-                No se encontraron proveedores
+                No se encontraron empacadoras
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Intenta ajustar los filtros o crear un nuevo proveedor
+                Intenta ajustar los filtros o crear una nueva empacadora
               </Typography>
             </Paper>
           ) : (
@@ -389,8 +317,8 @@ export default function ProvidersList() {
                 mx: { xs: 0 }
               }}
             >
-              {paginatedProviders.map((provider) => {
-                const isSelected = Boolean(selected && selected.id === provider.id);
+              {paginatedPackagers.map((packager) => {
+                const isSelected = Boolean(selected && selected.id === packager.id);
                 return (
                   <Grid 
                     item 
@@ -399,7 +327,7 @@ export default function ProvidersList() {
                     md={4} 
                     lg={4} 
                     xl={4} 
-                    key={provider.id}
+                    key={packager.id}
                     sx={{
                       padding: { xs: '0 !important', sm: undefined }
                     }}
@@ -407,7 +335,7 @@ export default function ProvidersList() {
                     <StyledCard
                       elevation={isSelected ? 8 : 2}
                       selected={isSelected}
-                      onClick={() => setSelected(provider)}
+                      onClick={() => setSelected(packager)}
                     >
                       <CardContent sx={{ pb: 1 }}>
                         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 2 }}>
@@ -426,31 +354,31 @@ export default function ProvidersList() {
                                 whiteSpace: 'nowrap',
                               }}
                             >
-                              {provider.name}
+                              {packager.name}
                             </Typography>
                           </Box>
                           <Chip
-                            label={provider.active ? 'Activo' : 'Inactivo'}
-                            color={provider.active ? 'success' : 'default'}
+                            label={packager.active ? 'Activo' : 'Inactivo'}
+                            color={packager.active ? 'success' : 'default'}
                             size="small"
                             variant="outlined"
                           />
                         </Box>
                         
                         <Stack spacing={1}>
-                          {provider.type && (
+                          {packager.location && (
                             <Typography variant="body2" color="text.secondary">
-                              📋 {getTipoProveedorLabel(provider.type)}
+                              📍 {packager.location}
                             </Typography>
                           )}
-                          {provider.location && (
+                          {packager.ruc && (
                             <Typography variant="body2" color="text.secondary">
-                              📍 {provider.location}
+                              📋 RUC: {packager.ruc}
                             </Typography>
                           )}
-                          {provider.capacity && (
+                          {packager.contact_whatsapp && (
                             <Typography variant="body2" color="text.secondary">
-                              📦 {provider.capacity.toLocaleString()} lbs
+                              📱 {packager.contact_whatsapp}
                             </Typography>
                           )}
                         </Stack>
@@ -463,7 +391,7 @@ export default function ProvidersList() {
                             color="primary"
                             onClick={(e) => {
                               e.stopPropagation();
-                              navigate(`/providers/${provider.id}/edit`);
+                              navigate(`/packagers/${packager.id}/edit`);
                             }}
                           >
                             <EditIcon fontSize="small" />
@@ -475,7 +403,7 @@ export default function ProvidersList() {
                             color="error"
                             onClick={(e) => {
                               e.stopPropagation();
-                              askDelete(provider.id, provider.name);
+                              askDelete(packager.id, packager.name);
                             }}
                           >
                             <DeleteIcon fontSize="small" />
@@ -490,11 +418,11 @@ export default function ProvidersList() {
           )}
 
           {/* Paginación */}
-          {filteredProviders.length > pageSize && (
+          {filteredPackagers.length > pageSize && (
             <Paper elevation={1} sx={{ p: 2, mt: 3, borderRadius: 2, overflow: 'auto' }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
                 <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
-                  Mostrando {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, filteredProviders.length)} de {filteredProviders.length} resultados
+                  Mostrando {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, filteredPackagers.length)} de {filteredPackagers.length} resultados
                 </Typography>
                 <Pagination
                   count={totalPages}
@@ -528,7 +456,7 @@ export default function ProvidersList() {
         </DialogTitle>
         <DialogContent>
           <Typography variant="body1" sx={{ mb: 2 }}>
-            ¿Está seguro que desea eliminar el proveedor{' '}
+            ¿Está seguro que desea eliminar la empacadora{' '}
             <Typography component="span" sx={{ fontWeight: 600 }}>
               {deletingName}
             </Typography>

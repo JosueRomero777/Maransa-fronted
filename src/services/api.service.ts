@@ -1,12 +1,25 @@
+// OPCIÓN 1: Gateway como proxy simple
+// const API_BASE_URL = 'http://localhost:8080';
+
+// OPCIÓN 2: Sin gateway (directo al backend)
 const API_BASE_URL = 'http://localhost:3000';
 
 class ApiService {
   private getAuthHeaders(): HeadersInit {
     const token = localStorage.getItem('token');
-    return {
+    const headers: HeadersInit = {
       'Content-Type': 'application/json',
       ...(token && { 'Authorization': `Bearer ${token}` }),
     };
+    return headers;
+  }
+
+  private getAuthHeadersForFormData(): HeadersInit {
+    const token = localStorage.getItem('token');
+    const headers: HeadersInit = {
+      ...(token && { 'Authorization': `Bearer ${token}` }),
+    };
+    return headers;
   }
 
   async get<T>(endpoint: string): Promise<T> {
@@ -28,10 +41,11 @@ class ApiService {
   }
 
   async post<T>(endpoint: string, data: any): Promise<T> {
+    const isFormData = data instanceof FormData;
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'POST',
-      headers: this.getAuthHeaders(),
-      body: JSON.stringify(data),
+      headers: isFormData ? this.getAuthHeadersForFormData() : this.getAuthHeaders(),
+      body: isFormData ? data : JSON.stringify(data),
     });
 
     if (!response.ok) {

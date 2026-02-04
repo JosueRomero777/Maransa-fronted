@@ -19,6 +19,15 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Card,
+  CardContent,
+  Stack,
+  Divider,
 } from '@mui/material';
 import {
   PersonAdd as PersonAddIcon,
@@ -37,11 +46,37 @@ interface User {
   updatedAt: string;
 }
 
+interface CreateUserForm {
+  name: string;
+  email: string;
+  password: string;
+  role: string;
+}
+
+const roles = [
+  { value: 'ADMIN', label: 'Administrador' },
+  { value: 'COMPRAS', label: 'Compras' },
+  { value: 'LABORATORIO', label: 'Laboratorio' },
+  { value: 'LOGISTICA', label: 'Logística' },
+  { value: 'CUSTODIA', label: 'Custodia' },
+  { value: 'FACTURACION', label: 'Facturación' },
+  { value: 'GERENCIA', label: 'Gerencia' },
+];
+
 const UsersList: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
+  const [openCreateDialog, setOpenCreateDialog] = useState(false);
+  const [createLoading, setCreateLoading] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [formData, setFormData] = useState<CreateUserForm>({
+    name: '',
+    email: '',
+    password: '',
+    role: 'COMPRAS',
+  });
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
     userId: number;
@@ -66,6 +101,40 @@ const UsersList: React.FC = () => {
   useEffect(() => {
     loadUsers();
   }, []);
+
+  const handleCreateUser = async () => {
+    try {
+      if (!formData.name.trim() || !formData.email.trim() || !formData.password.trim()) {
+        setCreateError('Todos los campos son requeridos');
+        return;
+      }
+
+      if (formData.password.length < 6) {
+        setCreateError('La contraseña debe tener al menos 6 caracteres');
+        return;
+      }
+
+      setCreateLoading(true);
+      setCreateError(null);
+
+      await apiService.post('/users', {
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        role: formData.role,
+      });
+
+      setFormData({ name: '', email: '', password: '', role: 'COMPRAS' });
+      setOpenCreateDialog(false);
+      await loadUsers();
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Error al crear usuario';
+      setCreateError(errorMsg);
+      console.error('Error creando usuario:', err);
+    } finally {
+      setCreateLoading(false);
+    }
+  };
 
   const handleAction = async (userId: number, action: 'activate' | 'deactivate') => {
     try {
@@ -114,6 +183,14 @@ const UsersList: React.FC = () => {
         <Typography variant="h4" component="h1" sx={{ fontWeight: 600 }}>
           Gestión de Usuarios
         </Typography>
+        <Button
+          variant="contained"
+          startIcon={<PersonAddIcon />}
+          onClick={() => setOpenCreateDialog(true)}
+          sx={{ borderRadius: 2 }}
+        >
+          Nuevo Usuario
+        </Button>
       </Box>
 
       {error && (
@@ -122,7 +199,8 @@ const UsersList: React.FC = () => {
         </Alert>
       )}
 
-      <Paper elevation={2} sx={{ borderRadius: 2 }}>
+      {/* Vista Desktop - Tabla */}
+      <Paper elevation={2} sx={{ borderRadius: 2, display: { xs: 'none', md: 'block' } }}>
         <TableContainer>
           <Table>
             <TableHead>
@@ -199,6 +277,96 @@ const UsersList: React.FC = () => {
         )}
       </Paper>
 
+      {/* Vista Móvil - Cards */}
+      <Stack spacing={2} sx={{ display: { xs: 'block', md: 'none' } }}>
+        {users.length === 0 ? (
+          <Paper elevation={2} sx={{ p: 4, textAlign: 'center', borderRadius: 2 }}>
+            <Typography variant="body2" color="text.secondary">
+              No hay usuarios registrados
+            </Typography>
+          </Paper>
+        ) : (
+          users.map((user) => (
+            <Card key={user.id} elevation={2} sx={{ borderRadius: 2 }}>
+              <CardContent>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                  <Box>
+                    <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
+                      {user.name}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      ID: {user.id}
+                    </Typography>
+                  </Box>
+                  <Chip
+                    label={user.active ? 'Activo' : 'Inactivo'}
+                    color={user.active ? 'success' : 'default'}
+                    size="small"
+                  />
+                </Box>
+
+                <Divider sx={{ my: 1.5 }} />
+
+                <Stack spacing={1}>
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">
+                      Email
+                    </Typography>
+                    <Typography variant="body2">
+                      {user.email}
+                    </Typography>
+                  </Box>
+
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">
+                      Rol
+                    </Typography>
+                    <Typography variant="body2">
+                      {getRoleLabel(user.role)}
+                    </Typography>
+                  </Box>
+
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">
+                      Fecha de Registro
+                    </Typography>
+                    <Typography variant="body2">
+                      {new Date(user.createdAt).toLocaleDateString('es-ES')}
+                    </Typography>
+                  </Box>
+                </Stack>
+
+                <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
+                  {user.active ? (
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      size="small"
+                      startIcon={actionLoading === user.id ? <CircularProgress size={16} /> : <CloseIcon />}
+                      onClick={() => openConfirmDialog(user.id, 'deactivate', user.name)}
+                      disabled={actionLoading === user.id}
+                    >
+                      Desactivar
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outlined"
+                      color="success"
+                      size="small"
+                      startIcon={actionLoading === user.id ? <CircularProgress size={16} /> : <CheckIcon />}
+                      onClick={() => openConfirmDialog(user.id, 'activate', user.name)}
+                      disabled={actionLoading === user.id}
+                    >
+                      Activar
+                    </Button>
+                  )}
+                </Box>
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </Stack>
+
       {/* Diálogo de confirmación */}
       <Dialog
         open={confirmDialog?.open || false}
@@ -233,6 +401,84 @@ const UsersList: React.FC = () => {
             variant="contained"
           >
             {confirmDialog?.action === 'activate' ? 'Activar' : 'Desactivar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Diálogo de crear usuario */}
+      <Dialog
+        open={openCreateDialog}
+        onClose={() => {
+          if (!createLoading) {
+            setOpenCreateDialog(false);
+            setCreateError(null);
+          }
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ pb: 1 }}>
+          <Typography variant="h6" component="div" sx={{ fontWeight: 600 }}>
+            Crear Nuevo Usuario
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          {createError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {createError}
+            </Alert>
+          )}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <TextField
+              label="Nombre"
+              fullWidth
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              disabled={createLoading}
+            />
+            <TextField
+              label="Email"
+              type="email"
+              fullWidth
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              disabled={createLoading}
+            />
+            <TextField
+              label="Contraseña"
+              type="password"
+              fullWidth
+              value={formData.password}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              disabled={createLoading}
+              helperText="Mínimo 6 caracteres"
+            />
+            <FormControl fullWidth disabled={createLoading}>
+              <InputLabel>Rol</InputLabel>
+              <Select
+                value={formData.role}
+                label="Rol"
+                onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+              >
+                {roles.map((role) => (
+                  <MenuItem key={role.value} value={role.value}>
+                    {role.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenCreateDialog(false)} disabled={createLoading}>
+            Cancelar
+          </Button>
+          <Button
+            onClick={handleCreateUser}
+            variant="contained"
+            disabled={createLoading}
+          >
+            {createLoading ? <CircularProgress size={20} /> : 'Crear Usuario'}
           </Button>
         </DialogActions>
       </Dialog>

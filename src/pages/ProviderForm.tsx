@@ -207,7 +207,7 @@ export default function ProviderForm() {
         <Button
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate('/providers')}
-          sx={{ mr: 2, textTransform: 'none' }}
+          sx={{ mr: 2, textTransform: 'none', display: { xs: 'none', sm: 'flex' } }}
         >
           Volver
         </Button>
