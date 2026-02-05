@@ -27,6 +27,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import { useAuth } from '../context';
+import { API_BASE_URL } from '../config/api.config';
 import shrimpSizesService, { 
   type ShrimpType, 
   type PresentationType, 
