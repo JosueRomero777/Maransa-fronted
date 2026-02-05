@@ -1,6 +1,6 @@
 import { apiService } from './api.service';
 
-const API_BASE_URL = 'http://localhost:3000'; // Backend NestJS
+import { API_BASE_URL } from '../config/api.config';
 const AI_SERVICE_URL = 'http://localhost:8000'; // Microservicio Python directo
 
 export interface AIPredictionRequest {

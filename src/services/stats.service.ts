@@ -3,7 +3,7 @@ import { providerService } from './provider.service';
 import { packagerService } from './packager.service';
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:3000';
+import { API_BASE_URL } from '../config/api.config';
 
 const api = axios.create({
   baseURL: API_BASE_URL,

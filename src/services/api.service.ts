@@ -2,7 +2,7 @@
 // const API_BASE_URL = 'http://localhost:8080';
 
 // OPCIÓN 2: Sin gateway (directo al backend)
-const API_BASE_URL = 'http://localhost:3000';
+import { API_BASE_URL } from '../config/api.config';
 
 class ApiService {
   private getAuthHeaders(): HeadersInit {
