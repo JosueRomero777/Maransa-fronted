@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config/api.config';
 import {
   Box,
   Button,
@@ -19,8 +20,6 @@ import {
 } from '@mui/material';
 import { Add, Delete, Save, ArrowBack } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 // Códigos de Forma de Pago según SRI Ecuador
 const FORMAS_PAGO = [

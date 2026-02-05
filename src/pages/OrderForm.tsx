@@ -164,7 +164,7 @@ const OrderForm: React.FC = () => {
       const token = localStorage.getItem('token');
       console.log('🔑 Token:', token ? 'Disponible' : 'No disponible');
       
-      const response = await fetch('http://localhost:3000/providers', {
+      const response = await fetch(`${API_BASE_URL}/providers`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -189,7 +189,7 @@ const OrderForm: React.FC = () => {
 
   const loadPackagers = async () => {
     try {
-      const response = await fetch('http://localhost:3000/packagers', {
+      const response = await fetch(`${API_BASE_URL}/packagers`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
@@ -209,7 +209,7 @@ const OrderForm: React.FC = () => {
 
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:3000/orders/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/orders/${id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
@@ -256,8 +256,8 @@ const OrderForm: React.FC = () => {
       };
       
       const url = isEdit 
-        ? `http://localhost:3000/orders/${id}`
-        : 'http://localhost:3000/orders';
+        ? `${API_BASE_URL}/orders/${id}`
+        : `${API_BASE_URL}/orders`;
       
       const method = isEdit ? 'PATCH' : 'POST';
 

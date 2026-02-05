@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import {
+import { API_BASE_URL } from '../config/api.config'
   Alert,
   Box,
   Button,
@@ -110,7 +110,7 @@ const LaboratoryPage: React.FC = () => {
       const loadFile = async () => {
         try {
           const token = localStorage.getItem('token');
-          const response = await fetch(`http://localhost:3000/laboratory/${previewFile.labId}/files/${previewFile.file}`, {
+          const response = await fetch(`${API_BASE_URL}/laboratory/${previewFile.labId}/files/${previewFile.file}`, {
             headers: {
               ...(token && { 'Authorization': `Bearer ${token}` }),
             },
@@ -719,7 +719,7 @@ const LaboratoryPage: React.FC = () => {
                                       if (isImage || isPdf) {
                                         setPreviewFile({ file: fileName || '', labId: selectedLab.id });
                                       } else {
-                                        window.open(`http://localhost:3000/laboratory/${selectedLab.id}/files/${fileName}`, '_blank');
+                                        window.open(`${API_BASE_URL}/laboratory/${selectedLab.id}/files/${fileName}`, '_blank');
                                       }
                                     }}
                                   >

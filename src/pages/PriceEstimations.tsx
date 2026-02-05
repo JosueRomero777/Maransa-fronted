@@ -96,7 +96,7 @@ const PriceEstimationsPage: React.FC = () => {
       throw new Error('No hay token de autenticación');
     }
 
-    const response = await fetch('http://localhost:3000/price-estimations', {
+    const response = await fetch(`${API_BASE_URL}/price-estimations`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -118,7 +118,7 @@ const PriceEstimationsPage: React.FC = () => {
       throw new Error('No hay token de autenticación');
     }
 
-    const response = await fetch('http://localhost:3000/price-estimations/market-factors', {
+    const response = await fetch(`${API_BASE_URL}/price-estimations/market-factors`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -140,7 +140,7 @@ const PriceEstimationsPage: React.FC = () => {
       throw new Error('No hay token de autenticación');
     }
 
-    const response = await fetch('http://localhost:3000/price-estimations/accuracy', {
+    const response = await fetch(`${API_BASE_URL}/price-estimations/accuracy`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -160,7 +160,7 @@ const PriceEstimationsPage: React.FC = () => {
   const handleCreateEstimation = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await fetch('http://localhost:3000/price-estimations/quick-estimate', {
+      const response = await fetch(`${API_BASE_URL}/price-estimations/quick-estimate`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -189,7 +189,7 @@ const PriceEstimationsPage: React.FC = () => {
 
   const updateMarketFactor = async (id: number, valor: number) => {
     try {
-      const response = await fetch(`http://localhost:3000/price-estimations/market-factors/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/price-estimations/market-factors/${id}`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,

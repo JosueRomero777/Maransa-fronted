@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config/api.config';
 import {
   Box,
   Paper,
@@ -155,7 +156,7 @@ const OrderDetail: React.FC = () => {
   const loadOrderDetail = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:3000/orders/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/orders/${id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
@@ -180,7 +181,7 @@ const OrderDetail: React.FC = () => {
 
     try {
       setStatusLoading(true);
-      const response = await fetch(`http://localhost:3000/orders/${order.id}/status`, {
+      const response = await fetch(`${API_BASE_URL}/orders/${order.id}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

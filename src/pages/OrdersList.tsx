@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { API_BASE_URL } from '../config/api.config';
 import {
   Box,
   Paper,
@@ -159,7 +160,7 @@ const OrdersList: React.FC = () => {
         }
       });
 
-      const response = await fetch(`http://localhost:3000/orders?${queryParams}`, {
+      const response = await fetch(`${API_BASE_URL}/orders?${queryParams}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
@@ -182,7 +183,7 @@ const OrdersList: React.FC = () => {
 
   const loadProviders = async () => {
     try {
-      const response = await fetch('http://localhost:3000/providers', {
+      const response = await fetch(`${API_BASE_URL}/providers`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
@@ -199,7 +200,7 @@ const OrdersList: React.FC = () => {
 
   const loadAvailableDates = async () => {
     try {
-      const response = await fetch('http://localhost:3000/orders/available-dates', {
+      const response = await fetch(`${API_BASE_URL}/orders/available-dates`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
@@ -217,7 +218,7 @@ const OrdersList: React.FC = () => {
 
   const loadUsedProviders = async () => {
     try {
-      const response = await fetch('http://localhost:3000/orders/used-providers', {
+      const response = await fetch(`${API_BASE_URL}/orders/used-providers`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
@@ -234,7 +235,7 @@ const OrdersList: React.FC = () => {
 
   const loadUsedStatuses = async () => {
     try {
-      const response = await fetch('http://localhost:3000/orders/used-statuses', {
+      const response = await fetch(`${API_BASE_URL}/orders/used-statuses`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
@@ -251,7 +252,7 @@ const OrdersList: React.FC = () => {
 
   const loadStats = async () => {
     try {
-      const response = await fetch('http://localhost:3000/orders/statistics', {
+      const response = await fetch(`${API_BASE_URL}/orders/statistics`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },
@@ -268,7 +269,7 @@ const OrdersList: React.FC = () => {
 
   const handleDeleteOrder = async (order: Order) => {
     try {
-      const response = await fetch(`http://localhost:3000/orders/${order.id}`, {
+      const response = await fetch(`${API_BASE_URL}/orders/${order.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,

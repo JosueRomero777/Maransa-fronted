@@ -157,7 +157,7 @@ const AIPredictionsPage: React.FC = () => {
   const loadPredictionHistory = async () => {
     try {
       console.log('Cargando historial de predicciones...');
-      const response = await fetch('http://localhost:3000/ai/predictions/history?limit=10', {
+      const response = await fetch(`${API_BASE_URL}/ai/predictions/history?limit=10`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
         },

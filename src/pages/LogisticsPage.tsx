@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config/api.config';
 import {
   Box,
   Button,
@@ -96,7 +97,7 @@ export default function LogisticsPage() {
           const token = localStorage.getItem('token');
           console.log('Loading preview for:', { logId: previewFile.logId, file: previewFile.file, hasToken: !!token });
           
-          const response = await fetch(`http://localhost:3000/logistics/${previewFile.logId}/files/${previewFile.file}`, {
+          const response = await fetch(`${API_BASE_URL}/logistics/${previewFile.logId}/files/${previewFile.file}`, {
             headers: {
               'Authorization': `Bearer ${token}`
             }
@@ -276,7 +277,7 @@ export default function LogisticsPage() {
     const loadCustodyInfo = async () => {
       if (selectedLogistics && selectedLogistics.orderId) {
         try {
-          const response = await fetch(`http://localhost:3000/custody/order/${selectedLogistics.orderId}`, {
+          const response = await fetch(`${API_BASE_URL}/custody/order/${selectedLogistics.orderId}`, {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('token')}`
             }
@@ -1107,7 +1108,7 @@ export default function LogisticsPage() {
                                       if (isImage || isPdf) {
                                         setPreviewFile({ file, logId: selectedLogistics.id });
                                       } else {
-                                        window.open(`http://localhost:3000/logistics/${selectedLogistics.id}/files/${file}`, '_blank');
+                                        window.open(`${API_BASE_URL}/logistics/${selectedLogistics.id}/files/${file}`, '_blank');
                                       }
                                     }}
                                   >
@@ -1147,7 +1148,7 @@ export default function LogisticsPage() {
                                       if (isImage || isPdf) {
                                         setPreviewFile({ file, logId: selectedLogistics.id });
                                       } else {
-                                        window.open(`http://localhost:3000/logistics/${selectedLogistics.id}/files/${file}`, '_blank');
+                                        window.open(`${API_BASE_URL}/logistics/${selectedLogistics.id}/files/${file}`, '_blank');
                                       }
                                     }}
                                   >
@@ -1543,7 +1544,7 @@ export default function LogisticsPage() {
               <Button
                 onClick={() => {
                   const link = document.createElement('a');
-                  link.href = `http://localhost:3000/logistics/${previewFile.logId}/files/${previewFile.file}`;
+                  link.href = `${API_BASE_URL}/logistics/${previewFile.logId}/files/${previewFile.file}`;
                   link.download = previewFile.file;
                   document.body.appendChild(link);
                   link.click();

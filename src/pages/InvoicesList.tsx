@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../config/api.config';
 import {
   Box,
   Button,
@@ -29,8 +30,6 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import dayjs from 'dayjs';
 import { alpha } from '@mui/material/styles';
 import type { Invoice } from '../types/invoicing';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 const estadoColors: Record<string, 'default' | 'primary' | 'secondary' | 'error' | 'warning' | 'info' | 'success'> = {
   BORRADOR: 'default',
