@@ -1,4 +1,5 @@
 import { apiService } from './api.service';
+import { API_BASE_URL } from '../config/api.config';
 
 export enum EstadoLogistica {
   PENDIENTE = 'PENDIENTE',
@@ -179,7 +180,7 @@ class LogisticsService {
     
     console.log('Downloading file:', { id, filename, hasToken: !!token });
     
-    const response = await fetch(`http://localhost:3000/logistics/${id}/files/${filename}`, {
+    const response = await fetch(`${API_BASE_URL}/logistics/${id}/files/${filename}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`,

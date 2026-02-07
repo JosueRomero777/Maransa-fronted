@@ -1,4 +1,5 @@
 import { apiService } from './api.service';
+import { API_BASE_URL } from '../config/api.config';
 
 export interface Laboratory {
   id: number;
@@ -168,7 +169,7 @@ class LaboratoryService {
     });
 
     const token = localStorage.getItem('token');
-    const response = await fetch(`http://localhost:3000/laboratory/${id}/upload-evidence`, {
+    const response = await fetch(`${API_BASE_URL}/laboratory/${id}/upload-evidence`, {
       method: 'POST',
       headers: {
         ...(token && { 'Authorization': `Bearer ${token}` }),

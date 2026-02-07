@@ -1,4 +1,5 @@
 import { apiService } from './api.service';
+import { API_BASE_URL } from '../config/api.config';
 
 export interface Custody {
   id: number;
@@ -162,7 +163,7 @@ class CustodyService {
     });
 
     const token = localStorage.getItem('token');
-    const response = await fetch(`http://localhost:3000/custody/${id}/upload-evidence`, {
+    const response = await fetch(`${API_BASE_URL}/custody/${id}/upload-evidence`, {
       method: 'POST',
       headers: {
         ...(token && { 'Authorization': `Bearer ${token}` }),
@@ -185,7 +186,7 @@ class CustodyService {
     });
 
     const token = localStorage.getItem('token');
-    const response = await fetch(`http://localhost:3000/custody/${id}/update-files`, {
+    const response = await fetch(`${API_BASE_URL}/custody/${id}/update-files`, {
       method: 'PUT',
       headers: {
         ...(token && { 'Authorization': `Bearer ${token}` }),

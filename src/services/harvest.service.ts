@@ -1,4 +1,5 @@
 import { apiService } from './api.service';
+import { API_BASE_URL } from '../config/api.config';
 
 export interface Harvest {
   id: number;
@@ -140,7 +141,7 @@ class HarvestService {
     });
 
     const token = localStorage.getItem('token');
-    const response = await fetch(`http://localhost:3000/harvest/${id}/upload-evidence`, {
+    const response = await fetch(`${API_BASE_URL}/harvest/${id}/upload-evidence`, {
       method: 'POST',
       headers: {
         ...(token && { 'Authorization': `Bearer ${token}` }),
@@ -163,7 +164,7 @@ class HarvestService {
     });
 
     const token = localStorage.getItem('token');
-    const response = await fetch(`http://localhost:3000/harvest/${id}/update-files`, {
+    const response = await fetch(`${API_BASE_URL}/harvest/${id}/update-files`, {
       method: 'PUT',
       headers: {
         ...(token && { 'Authorization': `Bearer ${token}` }),

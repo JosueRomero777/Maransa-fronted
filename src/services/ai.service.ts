@@ -1,7 +1,8 @@
 import { apiService } from './api.service';
-
 import { API_BASE_URL } from '../config/api.config';
-const AI_SERVICE_URL = 'http://localhost:8000'; // Microservicio Python directo
+
+// Microservicio Python a través del API Gateway
+const AI_SERVICE_URL = '/api/ai';
 
 export interface AIPredictionRequest {
   tipo_producto: string;
