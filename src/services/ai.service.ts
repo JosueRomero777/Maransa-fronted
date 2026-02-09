@@ -175,7 +175,7 @@ class AIService {
     request: AIDespachoPredictionRequest
   ): Promise<AIDespachoPredictionResponse> {
     try {
-      const response = await fetch(`${API_BASE_URL}/ai/predict/despacho`, {
+      const response = await fetch(`${API_BASE_URL}/ai/predict/despacho-price`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
