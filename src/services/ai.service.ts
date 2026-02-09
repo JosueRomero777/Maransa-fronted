@@ -175,18 +175,21 @@ class AIService {
     request: AIDespachoPredictionRequest
   ): Promise<AIDespachoPredictionResponse> {
     try {
-      const response = await fetch(`${API_BASE_URL}/ai/predict/despacho-price`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({
-          calibre: request.calibre,
-          presentacion: request.presentacion,
-          dias: request.dias,
-        }),
+      const query = new URLSearchParams({
+        calibre: request.calibre,
+        presentacion: request.presentacion,
+        dias: String(request.dias ?? 30),
       });
+
+      const response = await fetch(
+        `${API_BASE_URL}/ai/predict/despacho-price?${query.toString()}`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          },
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
