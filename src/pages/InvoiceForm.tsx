@@ -37,11 +37,11 @@ const FORMAS_PAGO = [
 // Nota: El camarón en Ecuador es producto de exportación, normalmente con 0% IVA
 const TARIFAS_IVA = [
   { codigoPorcentaje: '0', tarifa: 0, nombre: '0% (Exento - Camarón Exportación)' },
-  { codigoPorcentaje: '4', tarifa: 5, nombre: '5% (Reducido)' },
+  { codigoPorcentaje: '5', tarifa: 5, nombre: '5% (Reducido)' },
   { codigoPorcentaje: '2', tarifa: 12, nombre: '12% (General)' },
   { codigoPorcentaje: '3', tarifa: 14, nombre: '14% (Especial)' },
-  { codigoPorcentaje: '7', tarifa: 15, nombre: '15% (Especial)' },
-  { codigoPorcentaje: '5', tarifa: 20, nombre: '20% (Especial)' },
+  { codigoPorcentaje: '4', tarifa: 15, nombre: '15% (Especial)' },
+  { codigoPorcentaje: '8', tarifa: 20, nombre: '20% (Especial)' },
 ];
 
 interface InvoiceDetailForm {
@@ -145,16 +145,16 @@ export default function InvoiceForm() {
       const selectedOrder = orders.find(o => o.id === parseInt(formData.orderId));
       if (selectedOrder && selectedOrder.recepcion) {
         const recepcion = selectedOrder.recepcion;
-        
+
         // Construir descripción detallada
         const presentacion = selectedOrder.presentationType?.name || 'Camarón';
         const talla = selectedOrder.shrimpSize?.displayLabel || selectedOrder.shrimpSize?.code || 'Varios';
         const descripcion = `${presentacion} ${talla} - Orden ${selectedOrder.codigo}`;
-        
+
         // Usar valores FINALES de la recepción (no estimados)
         const cantidad = recepcion.pesoRecibido || selectedOrder.cantidadEstimada || 0;
         const precioUnitario = recepcion.precioFinalVenta || selectedOrder.precioEstimadoVenta || 0;
-        
+
         const nuevosDetalles = [
           {
             codigoPrincipal: selectedOrder.codigo || '',
@@ -168,7 +168,7 @@ export default function InvoiceForm() {
             tarifa: 0,
           },
         ];
-        
+
         setDetalles(nuevosDetalles);
       }
     }
@@ -180,7 +180,7 @@ export default function InvoiceForm() {
       const fechaEmision = new Date(formData.fechaEmision);
       const fechaVencimiento = new Date(fechaEmision);
       fechaVencimiento.setDate(fechaVencimiento.getDate() + formData.plazoCredito);
-      
+
       // Formato YYYY-MM-DD
       const fechaVencimientoStr = fechaVencimiento.toISOString().split('T')[0];
       setFormData(prev => ({
@@ -214,41 +214,41 @@ export default function InvoiceForm() {
     try {
       const token = localStorage.getItem('token');
       let url = `${API_BASE_URL}/orders?limit=100&includeRelations=true`;
-      
+
       // Filtrar por empacadora si se proporciona
       if (packagerId) {
         url += `&packagerId=${packagerId}`;
       }
-      
+
       console.log('📡 URL completa de pedidos:', url);
-      
+
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (!response.ok) throw new Error('Error al cargar pedidos');
       const data = await response.json();
-      
+
       console.log('📦 Pedidos recibidos del backend:', data.orders?.length || 0);
       console.log('📦 Datos completos:', data.orders);
-      
+
       // Filtrar solo pedidos con recepción aceptada
       const ordersWithAcceptedReception = (data.orders || []).filter((order: any) => {
         const hasReception = order.recepcion;
         const isAccepted = hasReception && order.recepcion.loteAceptado === true;
-        
+
         console.log(`📦 Orden ${order.codigo || order.id}:`, {
           tieneRecepcion: !!hasReception,
           loteAceptado: order.recepcion?.loteAceptado,
           recepcion: order.recepcion
         });
-        
+
         return isAccepted;
       });
-      
+
       console.log('✅ Pedidos filtrados con recepción aceptada:', ordersWithAcceptedReception.length);
-      
+
       setOrders(ordersWithAcceptedReception);
-      
+
       // Si el orderId actual no está en la nueva lista, limpiar la selección
       if (formData.orderId) {
         const stillExists = ordersWithAcceptedReception.some(
@@ -309,15 +309,15 @@ export default function InvoiceForm() {
     setDetalles([
       ...detalles,
       {
-        codigoPrincipal: '',
+        codigoPrincipal: `ITEM-${Date.now().toString().slice(-6)}`,
         codigoAuxiliar: '',
         descripcion: '',
         cantidad: 1,
         precioUnitario: 0,
         descuento: 0,
         codigoImpuesto: '2',
-        codigoPorcentaje: '2',
-        tarifa: 12,
+        codigoPorcentaje: '4',
+        tarifa: 15,
       },
     ]);
   };
@@ -347,14 +347,15 @@ export default function InvoiceForm() {
     let subtotal5 = 0;
     let subtotal12 = 0;
     let subtotal14 = 0;
+    let subtotal15 = 0;
     let subtotal20 = 0;
     let iva = 0;
 
     detalles.forEach((detalle) => {
       const total = detalle.cantidad * detalle.precioUnitario - detalle.descuento;
-      
+
       // Clasificar por tarifa (SRI Ecuador)
-      switch(detalle.tarifa) {
+      switch (detalle.tarifa) {
         case 0:
           subtotal0 += total;
           break;
@@ -370,6 +371,10 @@ export default function InvoiceForm() {
           subtotal14 += total;
           iva += total * 0.14;
           break;
+        case 15:
+          subtotal15 += total;
+          iva += total * 0.15;
+          break;
         case 20:
           subtotal20 += total;
           iva += total * 0.20;
@@ -377,9 +382,9 @@ export default function InvoiceForm() {
       }
     });
 
-    const totalFinal = subtotal0 + subtotal5 + subtotal12 + subtotal14 + subtotal20 + iva;
+    const totalFinal = subtotal0 + subtotal5 + subtotal12 + subtotal14 + subtotal15 + subtotal20 + iva;
 
-    return { subtotal0, subtotal5, subtotal12, subtotal14, subtotal20, iva, total: totalFinal };
+    return { subtotal0, subtotal5, subtotal12, subtotal14, subtotal15, subtotal20, iva, total: totalFinal };
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -710,18 +715,10 @@ export default function InvoiceForm() {
                         <TextField
                           size="small"
                           required
-                          select
                           value={detalle.codigoPrincipal}
                           onChange={(e) => handleDetailChange(index, 'codigoPrincipal', e.target.value)}
                           disabled={!!(formData.orderId && index === 0)}
-                        >
-                          <MenuItem value="">Seleccionar</MenuItem>
-                          {Array.isArray(orders) && orders.map((o) => (
-                            <MenuItem key={o.id} value={o.codigo}>
-                              {o.codigo} - {o.descripcion}
-                            </MenuItem>
-                          ))}
-                        </TextField>
+                        />
                       </TableCell>
                       <TableCell>
                         <TextField
@@ -816,6 +813,12 @@ export default function InvoiceForm() {
               <Grid size={{ xs: 12, sm: 6, md: 2 }}>
                 <Typography variant="body2" color="text.secondary">Subtotal 14%</Typography>
                 <Typography variant="h6">${totals.subtotal14.toFixed(2)}</Typography>
+              </Grid>
+            )}
+            {totals.subtotal15 > 0 && (
+              <Grid size={{ xs: 12, sm: 6, md: 2 }}>
+                <Typography variant="body2" color="text.secondary">Subtotal 15%</Typography>
+                <Typography variant="h6">${totals.subtotal15.toFixed(2)}</Typography>
               </Grid>
             )}
             {totals.subtotal20 > 0 && (
