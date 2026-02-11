@@ -365,17 +365,6 @@ const OrdersList: React.FC = () => {
           flexDirection: { xs: 'column', sm: 'row' },
           width: { xs: '100%', sm: 'auto' }
         }}>
-          {(user?.role === 'ADMIN' || user?.role === 'GERENCIA') && (
-            <Button
-              variant="outlined"
-              startIcon={<StatsIcon />}
-              onClick={() => setShowStats(!showStats)}
-              sx={{ width: { xs: '100%', sm: 'auto' } }}
-            >
-              Estadísticas
-            </Button>
-          )}
-          
           <Button
             variant="outlined"
             startIcon={<FilterIcon />}

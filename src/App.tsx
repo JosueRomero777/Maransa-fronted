@@ -759,7 +759,12 @@ function AppRoutes() {
 
 const AppLayout = React.memo(() => {
   const location = useLocation()
-  const showSummary = location.pathname.startsWith('/providers') || location.pathname.startsWith('/packagers')
+  const isProviderFormRoute = location.pathname === '/providers/new' || /\/providers\/\d+\/edit$/.test(location.pathname)
+  const isPackagerFormRoute = location.pathname === '/packagers/new' || /\/packagers\/\d+\/edit$/.test(location.pathname)
+  const showSummary =
+    (location.pathname.startsWith('/providers') || location.pathname.startsWith('/packagers')) &&
+    !isProviderFormRoute &&
+    !isPackagerFormRoute
   const { user, logout } = useAuth();
   const { mobileOpen, setMobileOpen } = useDrawer();
   const navigate = useNavigate();

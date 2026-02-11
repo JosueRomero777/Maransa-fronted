@@ -90,12 +90,43 @@ export default function InvoiceForm() {
     },
   ]);
 
+  const [buyerOverride, setBuyerOverride] = useState(false);
+  const [buyerData, setBuyerData] = useState({
+    nombre: '',
+    identificacion: '',
+    direccion: '',
+    email: '',
+  });
+
+  const selectedPackager = Array.isArray(packagers)
+    ? packagers.find((p) => p.id === parseInt(formData.packagerId))
+    : undefined;
+
+  const getTipoIdentificacionComprador = (identificacion?: string) => {
+    const cleaned = (identificacion || '').replace(/\D/g, '');
+    if (cleaned.length === 13) return '04'; // RUC
+    if (cleaned.length === 10) return '05'; // Cedula
+    if (cleaned.length > 0) return '06'; // Pasaporte u otro
+    return '07'; // Consumidor final
+  };
+
   useEffect(() => {
     loadPackagers();
     if (isEdit) {
       loadInvoice();
     }
   }, [id]);
+
+  useEffect(() => {
+    if (!buyerOverride && selectedPackager) {
+      setBuyerData({
+        nombre: selectedPackager.name || '',
+        identificacion: selectedPackager.ruc || '',
+        direccion: selectedPackager.location || '',
+        email: selectedPackager.email || '',
+      });
+    }
+  }, [buyerOverride, selectedPackager]);
 
   // Cargar pedidos cuando cambie la empacadora seleccionada
   useEffect(() => {
@@ -112,22 +143,32 @@ export default function InvoiceForm() {
   useEffect(() => {
     if (formData.orderId) {
       const selectedOrder = orders.find(o => o.id === parseInt(formData.orderId));
-      if (selectedOrder) {
-        // Auto-llenar el primer detalle con datos de la orden
-        const precioVenta = selectedOrder.precioEstimadoVenta || selectedOrder.precioEstimadoCompra || 0;
+      if (selectedOrder && selectedOrder.recepcion) {
+        const recepcion = selectedOrder.recepcion;
+        
+        // Construir descripción detallada
+        const presentacion = selectedOrder.presentationType?.name || 'Camarón';
+        const talla = selectedOrder.shrimpSize?.displayLabel || selectedOrder.shrimpSize?.code || 'Varios';
+        const descripcion = `${presentacion} ${talla} - Orden ${selectedOrder.codigo}`;
+        
+        // Usar valores FINALES de la recepción (no estimados)
+        const cantidad = recepcion.pesoRecibido || selectedOrder.cantidadEstimada || 0;
+        const precioUnitario = recepcion.precioFinalVenta || selectedOrder.precioEstimadoVenta || 0;
+        
         const nuevosDetalles = [
           {
             codigoPrincipal: selectedOrder.codigo || '',
             codigoAuxiliar: selectedOrder.id?.toString() || '',
-            descripcion: `Camarón ${selectedOrder.tallaEstimada || 'Varios'} - Orden ${selectedOrder.codigo}`,
-            cantidad: selectedOrder.cantidadEstimada || 1,
-            precioUnitario: precioVenta > 0 ? precioVenta : 0,
+            descripcion: descripcion,
+            cantidad: cantidad,
+            precioUnitario: precioUnitario,
             descuento: 0,
             codigoImpuesto: '2', // IVA
-            codigoPorcentaje: '0', // 0% - Camarón exento
+            codigoPorcentaje: '0', // 0% - Camarón exento (exportación)
             tarifa: 0,
           },
         ];
+        
         setDetalles(nuevosDetalles);
       }
     }
@@ -158,7 +199,7 @@ export default function InvoiceForm() {
   const loadPackagers = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/packagers`, {
+      const response = await fetch(`${API_BASE_URL}/packagers`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (!response.ok) throw new Error('Error al cargar empacadoras');
@@ -172,12 +213,14 @@ export default function InvoiceForm() {
   const loadOrders = async (packagerId?: number) => {
     try {
       const token = localStorage.getItem('token');
-      let url = `${API_URL}/orders?limit=100&includeRelations=true`;
+      let url = `${API_BASE_URL}/orders?limit=100&includeRelations=true`;
       
       // Filtrar por empacadora si se proporciona
       if (packagerId) {
         url += `&packagerId=${packagerId}`;
       }
+      
+      console.log('📡 URL completa de pedidos:', url);
       
       const response = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` },
@@ -185,10 +228,24 @@ export default function InvoiceForm() {
       if (!response.ok) throw new Error('Error al cargar pedidos');
       const data = await response.json();
       
+      console.log('📦 Pedidos recibidos del backend:', data.orders?.length || 0);
+      console.log('📦 Datos completos:', data.orders);
+      
       // Filtrar solo pedidos con recepción aceptada
-      const ordersWithAcceptedReception = (data.orders || []).filter((order: any) => 
-        order.recepcion && order.recepcion.loteAceptado === true
-      );
+      const ordersWithAcceptedReception = (data.orders || []).filter((order: any) => {
+        const hasReception = order.recepcion;
+        const isAccepted = hasReception && order.recepcion.loteAceptado === true;
+        
+        console.log(`📦 Orden ${order.codigo || order.id}:`, {
+          tieneRecepcion: !!hasReception,
+          loteAceptado: order.recepcion?.loteAceptado,
+          recepcion: order.recepcion
+        });
+        
+        return isAccepted;
+      });
+      
+      console.log('✅ Pedidos filtrados con recepción aceptada:', ordersWithAcceptedReception.length);
       
       setOrders(ordersWithAcceptedReception);
       
@@ -202,7 +259,7 @@ export default function InvoiceForm() {
         }
       }
     } catch (err: any) {
-      console.error(err);
+      console.error('❌ Error al cargar pedidos:', err);
       setOrders([]);
     }
   };
@@ -211,7 +268,7 @@ export default function InvoiceForm() {
     try {
       setLoading(true);
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/invoicing/invoices/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/invoicing/invoices/${id}`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
 
@@ -348,9 +405,18 @@ export default function InvoiceForm() {
       return;
     }
 
+    if (buyerOverride && !buyerData.identificacion) {
+      setError('Debe ingresar la identificación del comprador');
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
+
+      const compradorIdentificacion = buyerOverride
+        ? buyerData.identificacion
+        : selectedPackager?.ruc;
 
       const payload = {
         packagerId: parseInt(formData.packagerId),
@@ -360,6 +426,11 @@ export default function InvoiceForm() {
         formaPago: formData.formaPago,
         plazoCredito: formData.plazoCredito || undefined,
         observaciones: formData.observaciones || undefined,
+        tipoIdentificacionComprador: getTipoIdentificacionComprador(compradorIdentificacion),
+        identificacionComprador: compradorIdentificacion || undefined,
+        razonSocialComprador: buyerOverride ? buyerData.nombre || undefined : selectedPackager?.name || undefined,
+        direccionComprador: buyerOverride ? buyerData.direccion || undefined : selectedPackager?.location || undefined,
+        emailComprador: buyerOverride ? buyerData.email || undefined : undefined,
         detalles: detalles.map((d) => ({
           codigoPrincipal: d.codigoPrincipal,
           codigoAuxiliar: d.codigoAuxiliar || undefined,
@@ -375,8 +446,8 @@ export default function InvoiceForm() {
 
       const token = localStorage.getItem('token');
       const url = isEdit
-        ? `${API_URL}/invoicing/invoices/${id}`
-        : `${API_URL}/invoicing/invoices`;
+        ? `${API_BASE_URL}/invoicing/invoices/${id}`
+        : `${API_BASE_URL}/invoicing/invoices`;
 
       const response = await fetch(url, {
         method: isEdit ? 'PATCH' : 'POST',
@@ -526,6 +597,79 @@ export default function InvoiceForm() {
               />
             </Box>
           </Box>
+        </Paper>
+
+        <Paper sx={{ p: 3, mb: 3 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h6">Comprador</Typography>
+            <Button
+              variant={buyerOverride ? 'contained' : 'outlined'}
+              size="small"
+              onClick={() => setBuyerOverride((prev) => !prev)}
+            >
+              {buyerOverride ? 'Usar datos de empacadora' : 'Editar comprador'}
+            </Button>
+          </Box>
+
+          {!buyerOverride && (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+              <TextField
+                fullWidth
+                label="Razón social"
+                value={buyerData.nombre}
+                InputProps={{ readOnly: true }}
+              />
+              <TextField
+                fullWidth
+                label="Identificación"
+                value={buyerData.identificacion}
+                InputProps={{ readOnly: true }}
+              />
+              <TextField
+                fullWidth
+                label="Dirección"
+                value={buyerData.direccion}
+                InputProps={{ readOnly: true }}
+              />
+              <TextField
+                fullWidth
+                label="Email"
+                value={buyerData.email}
+                InputProps={{ readOnly: true }}
+              />
+            </Box>
+          )}
+
+          {buyerOverride && (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+              <TextField
+                fullWidth
+                required
+                label="Razón social"
+                value={buyerData.nombre}
+                onChange={(e) => setBuyerData((prev) => ({ ...prev, nombre: e.target.value }))}
+              />
+              <TextField
+                fullWidth
+                required
+                label="Identificación (RUC o Cédula)"
+                value={buyerData.identificacion}
+                onChange={(e) => setBuyerData((prev) => ({ ...prev, identificacion: e.target.value }))}
+              />
+              <TextField
+                fullWidth
+                label="Dirección"
+                value={buyerData.direccion}
+                onChange={(e) => setBuyerData((prev) => ({ ...prev, direccion: e.target.value }))}
+              />
+              <TextField
+                fullWidth
+                label="Email"
+                value={buyerData.email}
+                onChange={(e) => setBuyerData((prev) => ({ ...prev, email: e.target.value }))}
+              />
+            </Box>
+          )}
         </Paper>
 
         <Paper sx={{ p: 3, mb: 3 }}>

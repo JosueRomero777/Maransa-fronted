@@ -10,7 +10,6 @@ import {
   FormControlLabel,
   Alert,
   CircularProgress,
-  Grid,
   Divider,
 } from '@mui/material';
 import { Save, CheckCircle, ArrowBack } from '@mui/icons-material';
@@ -53,7 +52,7 @@ export default function InvoiceConfigPage() {
       setError(null);
 
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/invoicing/config/active`, {
+      const response = await fetch(`${API_BASE_URL}/invoicing/config/active`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -85,7 +84,7 @@ export default function InvoiceConfigPage() {
       setSuccess(null);
 
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/invoicing/config/${config.id}`, {
+      const response = await fetch(`${API_BASE_URL}/invoicing/config/${config.id}`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -131,19 +130,12 @@ export default function InvoiceConfigPage() {
             variant="outlined"
             startIcon={<ArrowBack />}
             onClick={() => navigate('/invoices')}
+            sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
           >
             Volver
           </Button>
           <Typography variant="h4">Configuración de Facturación Electrónica</Typography>
         </Box>
-        <Button
-          variant="contained"
-          startIcon={<Save />}
-          onClick={handleSave}
-          disabled={saving}
-        >
-          {saving ? 'Guardando...' : 'Guardar Cambios'}
-        </Button>
       </Box>
 
       {error && (
@@ -162,8 +154,15 @@ export default function InvoiceConfigPage() {
         <Typography variant="h6" gutterBottom>Información de la Empresa</Typography>
         <Divider sx={{ mb: 2 }} />
 
-        <Grid container spacing={2}>
-          <Grid item xs={12} md={6}>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' },
+            rowGap: 2,
+            columnGap: { md: 2 },
+          }}
+        >
+          <Box>
             <TextField
               fullWidth
               required
@@ -172,9 +171,9 @@ export default function InvoiceConfigPage() {
               onChange={(e) => setConfig({ ...config, ruc: e.target.value })}
               helperText="13 dígitos"
             />
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} md={6}>
+          <Box>
             <TextField
               fullWidth
               required
@@ -182,18 +181,18 @@ export default function InvoiceConfigPage() {
               value={config.razonSocial}
               onChange={(e) => setConfig({ ...config, razonSocial: e.target.value })}
             />
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} md={6}>
+          <Box>
             <TextField
               fullWidth
               label="Nombre Comercial"
               value={config.nombreComercial || ''}
               onChange={(e) => setConfig({ ...config, nombreComercial: e.target.value })}
             />
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} md={6}>
+          <Box>
             <TextField
               fullWidth
               label="Contribuyente Especial"
@@ -201,9 +200,9 @@ export default function InvoiceConfigPage() {
               onChange={(e) => setConfig({ ...config, contribuyenteEspecial: e.target.value })}
               helperText="Número de resolución (opcional)"
             />
-          </Grid>
+          </Box>
 
-          <Grid item xs={12}>
+          <Box sx={{ gridColumn: { md: '1 / -1' } }}>
             <TextField
               fullWidth
               required
@@ -211,9 +210,9 @@ export default function InvoiceConfigPage() {
               value={config.direccionMatriz}
               onChange={(e) => setConfig({ ...config, direccionMatriz: e.target.value })}
             />
-          </Grid>
+          </Box>
 
-          <Grid item xs={12}>
+          <Box sx={{ gridColumn: { md: '1 / -1' } }}>
             <TextField
               fullWidth
               label="Dirección Establecimiento"
@@ -221,9 +220,9 @@ export default function InvoiceConfigPage() {
               onChange={(e) => setConfig({ ...config, direccionEstablecimiento: e.target.value })}
               helperText="Si es diferente a la matriz"
             />
-          </Grid>
+          </Box>
 
-          <Grid item xs={12}>
+          <Box sx={{ gridColumn: { md: '1 / -1' } }}>
             <FormControlLabel
               control={
                 <Switch
@@ -233,16 +232,23 @@ export default function InvoiceConfigPage() {
               }
               label="Obligado a Llevar Contabilidad"
             />
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
       </Paper>
 
       <Paper sx={{ p: 3, mb: 3 }}>
         <Typography variant="h6" gutterBottom>Punto de Emisión</Typography>
         <Divider sx={{ mb: 2 }} />
 
-        <Grid container spacing={2}>
-          <Grid item xs={12} md={6}>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' },
+            rowGap: 2,
+            columnGap: { md: 2 },
+          }}
+        >
+          <Box>
             <TextField
               fullWidth
               required
@@ -251,9 +257,9 @@ export default function InvoiceConfigPage() {
               onChange={(e) => setConfig({ ...config, codigoEstablecimiento: e.target.value })}
               helperText="3 dígitos (ej: 001)"
             />
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} md={6}>
+          <Box>
             <TextField
               fullWidth
               required
@@ -262,16 +268,23 @@ export default function InvoiceConfigPage() {
               onChange={(e) => setConfig({ ...config, codigoPuntoEmision: e.target.value })}
               helperText="3 dígitos (ej: 001)"
             />
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
       </Paper>
 
       <Paper sx={{ p: 3, mb: 3 }}>
         <Typography variant="h6" gutterBottom>Configuración SRI</Typography>
         <Divider sx={{ mb: 2 }} />
 
-        <Grid container spacing={2}>
-          <Grid item xs={12} md={6}>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' },
+            rowGap: 2,
+            columnGap: { md: 2 },
+          }}
+        >
+          <Box>
             <TextField
               fullWidth
               select
@@ -283,9 +296,9 @@ export default function InvoiceConfigPage() {
               <option value="PRUEBAS">Pruebas</option>
               <option value="PRODUCCION">Producción</option>
             </TextField>
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} md={6}>
+          <Box>
             <TextField
               fullWidth
               select
@@ -297,8 +310,8 @@ export default function InvoiceConfigPage() {
               <option value="NORMAL">Normal</option>
               <option value="CONTINGENCIA">Contingencia</option>
             </TextField>
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
       </Paper>
 
       <Paper sx={{ p: 3, mb: 3 }}>
@@ -307,24 +320,31 @@ export default function InvoiceConfigPage() {
 
         <Alert severity="info" sx={{ mb: 2 }}>
           <Typography variant="body2">
-            📝 <strong>Modo de Prueba:</strong> Actualmente está configurado un certificado dummy para testing. 
-            Para producción, sube tu certificado .p12 real y configura la contraseña correcta.
+            <strong>Configuración de Certificado:</strong> Configura la ruta del certificado digital .p12 
+            y su contraseña para firmar electrónicamente las facturas.
           </Typography>
         </Alert>
 
-        <Grid container spacing={2}>
-          <Grid item xs={12} md={6}>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' },
+            rowGap: 2,
+            columnGap: { md: 2 },
+          }}
+        >
+          <Box sx={{ gridColumn: { md: '1 / -1' } }}>
             <TextField
               fullWidth
               label="Ruta del Certificado"
               value={config.rutaCertificado || ''}
               onChange={(e) => setConfig({ ...config, rutaCertificado: e.target.value })}
-              helperText="Ruta al archivo .p12"
-              disabled
+              helperText="Ruta completa al archivo .p12 (ej: certificates/firma.p12)"
+              placeholder="certificates/firma.p12"
             />
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} md={6}>
+          <Box>
             <TextField
               fullWidth
               type="password"
@@ -332,20 +352,19 @@ export default function InvoiceConfigPage() {
               value={config.claveCertificado || ''}
               onChange={(e) => setConfig({ ...config, claveCertificado: e.target.value })}
               helperText="Contraseña del archivo .p12"
-              disabled
             />
-          </Grid>
+          </Box>
 
-          <Grid item xs={12}>
+          <Box sx={{ gridColumn: { md: '1 / -1' } }}>
             <TextField
               fullWidth
               label="URL Servicio de Firma"
               value={config.urlFirmaService || ''}
               onChange={(e) => setConfig({ ...config, urlFirmaService: e.target.value })}
-              helperText="URL del microservicio de firma (default: http://localhost:9000)"
+              helperText="URL del microservicio de firma (ej: http://localhost:8001)"
             />
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
       </Paper>
 
       {config.activo && (
@@ -353,6 +372,18 @@ export default function InvoiceConfigPage() {
           Esta configuración está activa y se usará para generar facturas electrónicas.
         </Alert>
       )}
+
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
+        <Button
+          variant="contained"
+          startIcon={<Save />}
+          onClick={handleSave}
+          disabled={saving}
+          sx={{ width: { xs: '100%', sm: 'auto' } }}
+        >
+          {saving ? 'Guardando...' : 'Guardar Cambios'}
+        </Button>
+      </Box>
     </Box>
   );
 }

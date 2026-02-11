@@ -43,7 +43,10 @@ import {
 } from '@mui/icons-material';
 import { custodyService, EstadoCustodia } from '../services/custody.service';
 import type { Custody } from '../services/custody.service';
-import { TrackingMap } from '../components/TrackingMap';
+import { useAuth } from '../context';
+import { useCustodyTracking } from '../hooks/useCustodyTracking';
+import { RealTimeMap } from '../components/RealTimeMap';
+import { TrackingControlPanel } from '../components/TrackingControlPanel';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -78,11 +81,30 @@ interface Incident {
 }
 
 export default function CustodyPage() {
+  const { user } = useAuth();
   const [items, setItems] = useState<Custody[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedCustody, setSelectedCustody] = useState<Custody | null>(null);
   const [tabValue, setTabValue] = useState(0);
+
+  // Custody tracking hook
+  const currentUserId = user?.id ?? 0;
+  const custodyId = selectedCustody?.id ?? 0;
+  const {
+    isTracking,
+    isConnected,
+    currentLocation: custodyCurrentLocation,
+    spectatorCount,
+    error: trackingError,
+    sessionId,
+    isOwner: isTrackingOwner,
+    trackerName,
+    trackerEmail,
+    startTracking,
+    stopTracking,
+    joinAsSpectator,
+  } = useCustodyTracking(custodyId, currentUserId, selectedCustody?.estado === EstadoCustodia.EN_CUSTODIA);
 
   const [assignDialog, setAssignDialog] = useState({ open: false });
   const [incidentDialog, setIncidentDialog] = useState({ open: false });
@@ -141,6 +163,31 @@ export default function CustodyPage() {
       console.error('Error cargando órdenes disponibles:', err);
       setError('No se pudieron cargar las órdenes disponibles');
       setAvailableOrders([]);
+    }
+  };
+
+  // Handlers para tracking
+  const handleStartCustodyTracking = async () => {
+    try {
+      await startTracking();
+    } catch (err: any) {
+      console.error('Error iniciando tracking:', err);
+    }
+  };
+
+  const handleStopCustodyTracking = async () => {
+    try {
+      await stopTracking();
+    } catch (err: any) {
+      console.error('Error deteniendo tracking:', err);
+    }
+  };
+
+  const handleJoinCustodyTracking = async () => {
+    try {
+      await joinAsSpectator();
+    } catch (err: any) {
+      console.error('Error uniéndose como espectador:', err);
     }
   };
 
@@ -735,40 +782,82 @@ export default function CustodyPage() {
                      selectedCustody.logistics.origenLng &&
                      selectedCustody.logistics.destinoLat && 
                      selectedCustody.logistics.destinoLng ? (
-                      <TrackingMap
-                        origin={{
-                          lat: selectedCustody.logistics.origenLat,
-                          lng: selectedCustody.logistics.origenLng,
-                          address: selectedCustody.logistics.ubicacionOrigen || 'Origen'
-                        }}
-                        destination={{
-                          lat: selectedCustody.logistics.destinoLat,
-                          lng: selectedCustody.logistics.destinoLng,
-                          address: selectedCustody.logistics.ubicacionDestino || 'Destino'
-                        }}
-                        currentPosition={
-                          selectedCustody.logistics.ubicacionActualLat && selectedCustody.logistics.ubicacionActualLng
-                            ? {
+                      <Box>
+                        {trackingError && (
+                          <Alert severity="warning" sx={{ mb: 2 }}>
+                            {trackingError}
+                          </Alert>
+                        )}
+
+                        {selectedCustody.estado === EstadoCustodia.EN_CUSTODIA && (
+                          <TrackingControlPanel
+                            isTracking={isTracking}
+                            isConnected={isConnected}
+                            canStop={isTrackingOwner}
+                            spectatorCount={spectatorCount}
+                            error={trackingError}
+                            trackerName={isTrackingOwner ? (user?.name || 'Custodia') : (trackerName || 'Custodia')}
+                            trackerEmail={isTrackingOwner ? (user?.email || '') : (trackerEmail || '')}
+                            onStart={handleStartCustodyTracking}
+                            onStop={handleStopCustodyTracking}
+                            onJoin={handleJoinCustodyTracking}
+                          />
+                        )}
+
+                        <RealTimeMap
+                          origin={{
+                            lat: selectedCustody.logistics.origenLat,
+                            lng: selectedCustody.logistics.origenLng,
+                            name: selectedCustody.logistics.ubicacionOrigen || 'Origen'
+                          }}
+                          currentLocation={(() => {
+                            // Priorizar ubicación del tracking de custodia
+                            if (custodyCurrentLocation) {
+                              return { lat: custodyCurrentLocation.lat, lng: custodyCurrentLocation.lng };
+                            }
+                            // Fallback a ubicación de logística
+                            if (selectedCustody.logistics.ubicacionActualLat && selectedCustody.logistics.ubicacionActualLng) {
+                              return {
                                 lat: selectedCustody.logistics.ubicacionActualLat,
                                 lng: selectedCustody.logistics.ubicacionActualLng
-                              }
-                            : null
-                        }
-                        trackingPath={
-                          selectedCustody.logistics.historialUbicaciones 
-                            ? JSON.parse(JSON.stringify(selectedCustody.logistics.historialUbicaciones)) 
-                            : []
-                        }
-                        custodyPosition={
-                          selectedCustody.logistics.ubicacionActualLat && selectedCustody.logistics.ubicacionActualLng
-                            ? {
+                              };
+                            }
+                            return null;
+                          })()}
+                          trackerInfo={(() => {
+                            // Si hay tracking de logística activo, mostrarlo
+                            if (selectedCustody.logistics.trackingActivo && 
+                                selectedCustody.logistics.ubicacionActualLat && 
+                                selectedCustody.logistics.ubicacionActualLng) {
+                              return {
+                                name: 'Logística',
                                 lat: selectedCustody.logistics.ubicacionActualLat,
                                 lng: selectedCustody.logistics.ubicacionActualLng
-                              }
-                            : null
-                        }
-                        isCustodyActive={selectedCustody.estado === EstadoCustodia.EN_CUSTODIA}
-                      />
+                              };
+                            }
+                            return null;
+                          })()}
+                          custodyInfo={(() => {
+                            // Mostrar vehículo de custodia si tiene ubicación
+                            const lat = custodyCurrentLocation?.lat ?? selectedCustody.ubicacionActualLat;
+                            const lng = custodyCurrentLocation?.lng ?? selectedCustody.ubicacionActualLng;
+                            if (!lat || !lng) return null;
+                            return {
+                              name: 'Custodia',
+                              lat,
+                              lng
+                            };
+                          })()}
+                          destinations={[{
+                            id: selectedCustody.logistics.id,
+                            name: selectedCustody.logistics.ubicacionDestino || 'Destino',
+                            lat: selectedCustody.logistics.destinoLat,
+                            lng: selectedCustody.logistics.destinoLng
+                          }]}
+                          spectatorCount={spectatorCount}
+                          isTracking={isTracking}
+                        />
+                      </Box>
                     ) : (
                       <Alert severity="info">
                         El tracking GPS estará disponible cuando la logística esté en ruta
@@ -917,18 +1006,13 @@ export default function CustodyPage() {
                      selectedOrderForCreate.logistica.origenLng &&
                      selectedOrderForCreate.logistica.destinoLat && 
                      selectedOrderForCreate.logistica.destinoLng ? (
-                      <TrackingMap
+                      <RealTimeMap
                         origin={{
                           lat: selectedOrderForCreate.logistica.origenLat,
                           lng: selectedOrderForCreate.logistica.origenLng,
-                          address: selectedOrderForCreate.logistica.ubicacionOrigen || 'Origen'
+                          name: selectedOrderForCreate.logistica.ubicacionOrigen || 'Origen'
                         }}
-                        destination={{
-                          lat: selectedOrderForCreate.logistica.destinoLat,
-                          lng: selectedOrderForCreate.logistica.destinoLng,
-                          address: selectedOrderForCreate.logistica.ubicacionDestino || 'Destino'
-                        }}
-                        currentPosition={
+                        currentLocation={
                           selectedOrderForCreate.logistica.ubicacionActualLat && selectedOrderForCreate.logistica.ubicacionActualLng
                             ? {
                                 lat: selectedOrderForCreate.logistica.ubicacionActualLat,
@@ -936,7 +1020,13 @@ export default function CustodyPage() {
                               }
                             : null
                         }
-                        trackingPath={[]}
+                        destinations={[{
+                          id: selectedOrderForCreate.logistica.id,
+                          name: selectedOrderForCreate.logistica.ubicacionDestino || 'Destino',
+                          lat: selectedOrderForCreate.logistica.destinoLat,
+                          lng: selectedOrderForCreate.logistica.destinoLng
+                        }]}
+                        isTracking={false}
                       />
                     ) : (
                       <Alert severity="info">

@@ -4,10 +4,11 @@ import './TrackingControlPanel.css';
 interface TrackingControlPanelProps {
   isTracking: boolean;
   isConnected: boolean;
+  canStop: boolean;
   spectatorCount: number;
   error?: string | null;
   trackerName?: string;
-  sessionId?: string | null;
+  trackerEmail?: string;
   onStart: () => void;
   onStop: () => void;
   onJoin: () => void;
@@ -16,10 +17,11 @@ interface TrackingControlPanelProps {
 export const TrackingControlPanel: React.FC<TrackingControlPanelProps> = ({
   isTracking,
   isConnected,
+  canStop,
   spectatorCount,
   error,
   trackerName,
-  sessionId,
+  trackerEmail,
   onStart,
   onStop,
   onJoin
@@ -28,7 +30,7 @@ export const TrackingControlPanel: React.FC<TrackingControlPanelProps> = ({
     <div className="tracking-control-panel">
       {/* Header */}
       <div className="tcp-header">
-        <h3>📍 Control de Rastreo en Tiempo Real</h3>
+        <h3>Control de Rastreo en Tiempo Real</h3>
         <div className="tcp-status-indicator">
           <span className={`status-dot ${isConnected ? 'connected' : 'disconnected'}`} />
           <span className="status-text">
@@ -40,7 +42,7 @@ export const TrackingControlPanel: React.FC<TrackingControlPanelProps> = ({
       {/* Error Banner */}
       {error && (
         <div className="tcp-error-banner">
-          ⚠️ {error}
+          {error}
         </div>
       )}
 
@@ -50,27 +52,22 @@ export const TrackingControlPanel: React.FC<TrackingControlPanelProps> = ({
           <>
             <div className="tcp-info-item">
               <label>Estado</label>
-              <span className="tcp-badge active">🔴 Rastreando</span>
+              <span className="tcp-badge active">Rastreando</span>
             </div>
 
-            {sessionId && (
-              <div className="tcp-info-item">
-                <label>ID de Sesión</label>
-                <span className="tcp-session-id">{sessionId.substring(0, 8)}...</span>
-              </div>
-            )}
-
             <div className="tcp-info-item">
-              <label>Espectadores Conectados</label>
+              <label>Espectadores</label>
               <span className="tcp-badge spectators">
-                👥 {spectatorCount}
+                {spectatorCount}
               </span>
             </div>
 
-            {trackerName && (
+            {(trackerName || trackerEmail) && (
               <div className="tcp-info-item">
-                <label>Rastreador Activo</label>
-                <span className="tcp-tracker-name">{trackerName}</span>
+                <label>Rastreador</label>
+                <span className="tcp-tracker-name">
+                  {trackerName || 'Usuario'}{trackerEmail ? ` - ${trackerEmail}` : ''}
+                </span>
               </div>
             )}
           </>
@@ -79,7 +76,7 @@ export const TrackingControlPanel: React.FC<TrackingControlPanelProps> = ({
         {!isTracking && (
           <div className="tcp-info-item">
             <label>Estado</label>
-            <span className="tcp-badge inactive">⚪ No rastreando</span>
+            <span className="tcp-badge inactive">No rastreando</span>
           </div>
         )}
       </div>
@@ -94,26 +91,36 @@ export const TrackingControlPanel: React.FC<TrackingControlPanelProps> = ({
               disabled={!isConnected}
               title={!isConnected ? 'Esperando conexión...' : 'Iniciar rastreo en tiempo real'}
             >
-              🚀 Iniciar Rastreo
+              Iniciar Rastreo
             </button>
 
             <button
               className="tcp-btn tcp-btn-secondary"
               onClick={onJoin}
               disabled={!isConnected}
-              title={!isConnected ? 'Esperando conexión...' : 'Unírete como espectador'}
+              title={!isConnected ? 'Esperando conexión...' : 'Ver como espectador'}
             >
-              👁️ Ver Rastreo
+              Ver Rastreo
             </button>
           </>
         ) : (
-          <button
-            className="tcp-btn tcp-btn-danger"
-            onClick={onStop}
-            title="Detener rastreo en tiempo real"
-          >
-            ⏹️ Detener Rastreo
-          </button>
+          canStop ? (
+            <button
+              className="tcp-btn tcp-btn-danger"
+              onClick={onStop}
+              title="Detener rastreo en tiempo real"
+            >
+              Detener Rastreo
+            </button>
+          ) : (
+            <button
+              className="tcp-btn tcp-btn-secondary"
+              disabled
+              title="Rastreo activo por otro usuario"
+            >
+              Rastreo Activo
+            </button>
+          )
         )}
       </div>
 
@@ -121,8 +128,8 @@ export const TrackingControlPanel: React.FC<TrackingControlPanelProps> = ({
       <div className="tcp-footer-info">
         <p>
           {isTracking
-            ? `📡 Compartiendo ubicación en tiempo real...`
-            : `Activa el rastreo para que otros vean tu ubicación en el mapa.`}
+            ? (canStop ? 'Compartiendo ubicación en tiempo real' : 'Rastreo activo por otro usuario')
+            : 'Activa el rastreo para que otros vean tu ubicación en el mapa'}
         </p>
       </div>
     </div>

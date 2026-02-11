@@ -14,7 +14,6 @@ import {
   Switch,
   TextField,
   Typography,
-  Grid,
   Alert,
   CircularProgress,
 } from '@mui/material'
@@ -105,9 +104,15 @@ const ReceptionForm: React.FC<Props> = ({ reception, onSuccess, onCancel }) => {
         subheader="Completa la información de la recepción"
       />
       <CardContent>
-        <Grid container spacing={2}>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' },
+            gap: 2,
+          }}
+        >
           {!isEdit && (
-            <Grid item xs={12} sm={6}>
+            <Box>
               <FormControl fullWidth required>
                 <InputLabel>Orden</InputLabel>
                 <Select
@@ -123,18 +128,18 @@ const ReceptionForm: React.FC<Props> = ({ reception, onSuccess, onCancel }) => {
                 </Select>
                 {orderId === 0 && <FormHelperText>Selecciona una orden</FormHelperText>}
               </FormControl>
-            </Grid>
+            </Box>
           )}
 
-          <Grid item xs={12} sm={6}>
+          <Box>
             <DatePicker
               label="Fecha de llegada"
               value={fechaLlegada}
               onChange={(val) => setFechaLlegada(val)}
               slotProps={{ textField: { fullWidth: true } }}
             />
-          </Grid>
-          <Grid item xs={12} sm={6}>
+          </Box>
+          <Box>
             <TimeField
               label="Hora de llegada"
               format="HH:mm"
@@ -142,9 +147,9 @@ const ReceptionForm: React.FC<Props> = ({ reception, onSuccess, onCancel }) => {
               onChange={(val) => setHoraLlegada(val)}
               fullWidth
             />
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} sm={6}>
+          <Box>
             <TextField
               label="Peso recibido (lb)"
               type="number"
@@ -152,9 +157,9 @@ const ReceptionForm: React.FC<Props> = ({ reception, onSuccess, onCancel }) => {
               value={pesoRecibido}
               onChange={(e) => setPesoRecibido(e.target.value === '' ? '' : Number(e.target.value))}
             />
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} sm={6}>
+          <Box>
             <FormControl fullWidth>
               <InputLabel>Clasificación final</InputLabel>
               <Select
@@ -168,9 +173,9 @@ const ReceptionForm: React.FC<Props> = ({ reception, onSuccess, onCancel }) => {
                 ))}
               </Select>
             </FormControl>
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} sm={6}>
+          <Box>
             <TextField
               label="Precio final de venta"
               type="number"
@@ -178,9 +183,9 @@ const ReceptionForm: React.FC<Props> = ({ reception, onSuccess, onCancel }) => {
               value={precioFinalVenta}
               onChange={(e) => setPrecioFinalVenta(e.target.value === '' ? '' : Number(e.target.value))}
             />
-          </Grid>
+          </Box>
 
-          <Grid item xs={12}>
+          <Box sx={{ gridColumn: { sm: '1 / -1' } }}>
             <TextField
               label="Condiciones de venta"
               fullWidth
@@ -189,23 +194,23 @@ const ReceptionForm: React.FC<Props> = ({ reception, onSuccess, onCancel }) => {
               value={condicionesVenta}
               onChange={(e) => setCondicionesVenta(e.target.value)}
             />
-          </Grid>
+          </Box>
 
-          <Grid item xs={12} sm={6}>
+          <Box>
             <FormControlLabel
               control={<Switch checked={calidadValidada} onChange={(e) => setCalidadValidada(e.target.checked)} />}
               label="Calidad validada"
             />
-          </Grid>
-          <Grid item xs={12} sm={6}>
+          </Box>
+          <Box>
             <FormControlLabel
               control={<Switch checked={loteAceptado} onChange={(e) => setLoteAceptado(e.target.checked)} />}
               label="Lote aceptado"
             />
-          </Grid>
+          </Box>
 
           {!loteAceptado && (
-            <Grid item xs={12}>
+            <Box sx={{ gridColumn: { sm: '1 / -1' } }}>
               <TextField
                 label="Motivo de rechazo"
                 fullWidth
@@ -214,10 +219,10 @@ const ReceptionForm: React.FC<Props> = ({ reception, onSuccess, onCancel }) => {
                 value={motivoRechazo}
                 onChange={(e) => setMotivoRechazo(e.target.value)}
               />
-            </Grid>
+            </Box>
           )}
 
-          <Grid item xs={12}>
+          <Box sx={{ gridColumn: { sm: '1 / -1' } }}>
             <TextField
               label="Observaciones"
               fullWidth
@@ -226,8 +231,8 @@ const ReceptionForm: React.FC<Props> = ({ reception, onSuccess, onCancel }) => {
               value={observaciones}
               onChange={(e) => setObservaciones(e.target.value)}
             />
-          </Grid>
-        </Grid>
+          </Box>
+        </Box>
 
         {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
 

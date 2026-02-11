@@ -14,14 +14,15 @@ class TrackingWebSocketService {
         return;
       }
 
-      // Obtener URL base sin /api
-      const baseUrl = API_BASE_URL.replace('/api', '');
+      // URL base para WebSocket (opcional VITE_WS_URL)
+      const wsBaseUrl = import.meta.env.VITE_WS_URL || API_BASE_URL.replace('/api', '');
+      const socketUrl = `${wsBaseUrl}/tracking`;
 
-      this.socket = io(baseUrl, {
-        namespace: '/tracking',
+      this.socket = io(socketUrl, {
         auth: {
           token,
         },
+        transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
@@ -228,6 +229,15 @@ class TrackingWebSocketService {
   onSpectatorJoined(callback: (data: any) => void): void {
     if (this.socket) {
       this.socket.on('spectator_joined', callback);
+    }
+  }
+
+  /**
+   * Escucha confirmación de unirse como espectador
+   */
+  onSpectatorJoinedAck(callback: (data: any) => void): void {
+    if (this.socket) {
+      this.socket.on('spectator_joined_ack', callback);
     }
   }
 

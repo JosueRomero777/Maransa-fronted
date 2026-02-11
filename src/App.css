@@ -76,9 +76,7 @@ main.app-main {
 }
 
 @media (max-width: 480px) {
-  #root {
-    gap: 1rem;
-  }
+ 
 
   header.app-header {
     padding: 0 0.25rem;
@@ -239,7 +237,7 @@ main.app-main {
 /* Responsive */
 @media (max-width: 900px) {
   main.app-main { grid-template-columns: 1fr; }
-  #root { padding: 1rem; }
+  
 }
 
 /* Sidebar pop-out effect similar to .card */

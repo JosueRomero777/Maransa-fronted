@@ -1,5 +1,5 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
-import { trackingWebSocketService } from '../services/tracking-websocket.service';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { custodyWebSocketService } from '../services/custody-websocket.service';
 
 interface LocationData {
   lat: number;
@@ -8,7 +8,7 @@ interface LocationData {
   accuracy?: number;
 }
 
-interface TrackingState {
+interface CustodyTrackingState {
   isTracking: boolean;
   isConnected: boolean;
   currentLocation: LocationData | null;
@@ -21,8 +21,8 @@ interface TrackingState {
   trackerEmail: string | null;
 }
 
-export const useRealTimeTracking = (logisticsId: number, userId: number) => {
-  const [state, setState] = useState<TrackingState>({
+export const useCustodyTracking = (custodyId: number, userId: number, autoJoin: boolean = false) => {
+  const [state, setState] = useState<CustodyTrackingState>({
     isTracking: false,
     isConnected: false,
     currentLocation: null,
@@ -35,19 +35,18 @@ export const useRealTimeTracking = (logisticsId: number, userId: number) => {
     trackerEmail: null
   });
 
-  const watchIdRef = useRef<number | null>(null);
   const locationUpdateIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastLocationRef = useRef<LocationData | null>(null);
 
-  // Conectar WebSocket
   useEffect(() => {
+    if (!custodyId || !userId) return;
+
     const connect = async () => {
       try {
-        await trackingWebSocketService.connect(userId);
+        await custodyWebSocketService.connect(userId);
         setState(prev => ({ ...prev, isConnected: true }));
 
-        // Listeners
-        trackingWebSocketService.onLocationUpdate((data: any) => {
+        custodyWebSocketService.onLocationUpdate((data: any) => {
           setState(prev => ({
             ...prev,
             currentLocation: {
@@ -59,7 +58,7 @@ export const useRealTimeTracking = (logisticsId: number, userId: number) => {
           }));
         });
 
-        trackingWebSocketService.onTrackingStartedAck((data: any) => {
+        custodyWebSocketService.onTrackingStartedAck((data: any) => {
           setState(prev => ({
             ...prev,
             isTracking: true,
@@ -71,13 +70,11 @@ export const useRealTimeTracking = (logisticsId: number, userId: number) => {
           }));
         });
 
-        trackingWebSocketService.onTrackingStopped(() => {
+        custodyWebSocketService.onTrackingStopped(() => {
           setState(prev => ({
             ...prev,
             isTracking: false,
-            currentLocation: null,
             sessionId: null,
-            spectatorCount: 0,
             isOwner: false,
             trackerUserId: null,
             trackerName: null,
@@ -86,40 +83,64 @@ export const useRealTimeTracking = (logisticsId: number, userId: number) => {
           stopGeolocation();
         });
 
-        trackingWebSocketService.onTrackingError((data: any) => {
+        custodyWebSocketService.onTrackingError((data: any) => {
           setState(prev => ({
             ...prev,
             error: data.message
           }));
         });
 
-        trackingWebSocketService.onSpectatorJoined((data: any) => {
+        custodyWebSocketService.onSpectatorJoined((data: any) => {
           setState(prev => ({
             ...prev,
             spectatorCount: data.totalSpectators
           }));
         });
 
-        // Listener para cuando nos unimos como espectador
-        trackingWebSocketService.onSpectatorJoinedAck((data: any) => {
+        custodyWebSocketService.onSpectatorJoinedAck((data: any) => {
           setState(prev => ({
             ...prev,
-            sessionId: data.sessionId,
-            isTracking: true, // Mostrar como tracking activo aunque seamos espectadores
+            sessionId: data.sessionId ?? null,
+            isTracking: true,
             isOwner: data.activeTracker === userId,
             trackerUserId: data.activeTracker ?? null,
             trackerName: data.activeTrackerUser?.name ?? null,
             trackerEmail: data.activeTrackerUser?.email ?? null,
-            spectatorCount: data.totalSpectators,
+            spectatorCount: data.totalSpectators ?? prev.spectatorCount,
             currentLocation: data.currentLocation ? {
               lat: data.currentLocation.lat,
               lng: data.currentLocation.lng,
               timestamp: data.currentLocation.timestamp,
               accuracy: data.currentLocation.accuracy
-            } : null
+            } : prev.currentLocation
           }));
         });
 
+        custodyWebSocketService.onCurrentLocation((data: any) => {
+          setState(prev => ({
+            ...prev,
+            isTracking: !!data.activeTracker,
+            isOwner: data.activeTracker === userId,
+            trackerUserId: data.activeTracker ?? prev.trackerUserId,
+            trackerName: data.activeTrackerUser?.name ?? prev.trackerName,
+            trackerEmail: data.activeTrackerUser?.email ?? prev.trackerEmail,
+            spectatorCount: typeof data.spectators === 'number' ? data.spectators : prev.spectatorCount,
+            currentLocation: data.currentLocation ? {
+              lat: data.currentLocation.lat,
+              lng: data.currentLocation.lng,
+              timestamp: data.currentLocation.timestamp,
+              accuracy: data.currentLocation.accuracy
+            } : prev.currentLocation
+          }));
+        });
+
+        if (autoJoin) {
+          try {
+            await custodyWebSocketService.joinTracking(custodyId);
+          } catch (error) {
+            console.log('No hay tracking activo para auto-join de custodia');
+          }
+        }
       } catch (error: any) {
         setState(prev => ({
           ...prev,
@@ -132,51 +153,26 @@ export const useRealTimeTracking = (logisticsId: number, userId: number) => {
     connect();
 
     return () => {
-      trackingWebSocketService.disconnect();
+      custodyWebSocketService.disconnect();
     };
-  }, [userId]);
+  }, [custodyId, userId, autoJoin]);
 
-  // Auto-join si ya hay tracking activo
-  useEffect(() => {
-    if (!state.isConnected || !logisticsId || logisticsId === 0) return;
-
-    const autoJoinIfActive = async () => {
-      try {
-        // Intentar unirse como espectador automáticamente
-        await trackingWebSocketService.joinTracking(logisticsId);
-      } catch (error) {
-        // Si falla, no hay tracking activo, no hacer nada
-        console.log('No hay tracking activo para auto-join');
-      }
-    };
-
-    // Esperar un poco para que los listeners estén listos
-    const timer = setTimeout(() => {
-      autoJoinIfActive();
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [state.isConnected, logisticsId]);
-
-  // Obtener geolocalización
   const startGeolocation = useCallback(() => {
     if (!navigator.geolocation) {
-      setState(prev => ({ ...prev, error: 'Geolocalización no soportada' }));
+      setState(prev => ({ ...prev, error: 'Geolocalizacion no soportada' }));
       return;
     }
 
-    // Actualizar cada 5 segundos
     locationUpdateIntervalRef.current = setInterval(() => {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           const { latitude, longitude, accuracy } = position.coords;
 
-          // Solo enviar si cambió significativamente (> 10 metros)
           if (!lastLocationRef.current ||
             Math.sqrt(
               Math.pow(latitude - lastLocationRef.current.lat, 2) +
               Math.pow(longitude - lastLocationRef.current.lng, 2)
-            ) > 0.0001 // ~10 metros
+            ) > 0.0001
           ) {
             lastLocationRef.current = {
               lat: latitude,
@@ -185,8 +181,8 @@ export const useRealTimeTracking = (logisticsId: number, userId: number) => {
               accuracy
             };
 
-            trackingWebSocketService.updateLocation(
-              logisticsId,
+            custodyWebSocketService.updateLocation(
+              custodyId,
               latitude,
               longitude,
               accuracy
@@ -198,7 +194,7 @@ export const useRealTimeTracking = (logisticsId: number, userId: number) => {
         (error) => {
           setState(prev => ({
             ...prev,
-            error: `Error de geolocalización: ${error.message}`
+            error: `Error de geolocalizacion: ${error.message}`
           }));
         },
         {
@@ -208,74 +204,53 @@ export const useRealTimeTracking = (logisticsId: number, userId: number) => {
         }
       );
     }, 5000);
-  }, [logisticsId]);
+  }, [custodyId]);
 
   const stopGeolocation = useCallback(() => {
-    if (watchIdRef.current !== null) {
-      navigator.geolocation.clearWatch(watchIdRef.current);
-      watchIdRef.current = null;
-    }
     if (locationUpdateIntervalRef.current) {
       clearInterval(locationUpdateIntervalRef.current);
       locationUpdateIntervalRef.current = null;
     }
   }, []);
 
-  // Iniciar tracking
   const startTracking = useCallback(async () => {
     try {
       setState(prev => ({ ...prev, error: null }));
-      await trackingWebSocketService.startTracking(logisticsId);
+      await custodyWebSocketService.startTracking(custodyId);
       startGeolocation();
     } catch (error: any) {
-      setState(prev => ({
-        ...prev,
-        error: error.message
-      }));
+      setState(prev => ({ ...prev, error: error.message }));
     }
-  }, [logisticsId, startGeolocation]);
+  }, [custodyId, startGeolocation]);
 
-  // Detener tracking
   const stopTracking = useCallback(async () => {
     try {
       stopGeolocation();
-      await trackingWebSocketService.stopTracking(logisticsId);
+      await custodyWebSocketService.stopTracking(custodyId);
     } catch (error: any) {
-      setState(prev => ({
-        ...prev,
-        error: error.message
-      }));
+      setState(prev => ({ ...prev, error: error.message }));
     }
-  }, [logisticsId, stopGeolocation]);
+  }, [custodyId, stopGeolocation]);
 
-  // Unirse como espectador
   const joinAsSpectator = useCallback(async () => {
     try {
       setState(prev => ({ ...prev, error: null }));
-      await trackingWebSocketService.joinTracking(logisticsId);
+      await custodyWebSocketService.joinTracking(custodyId);
     } catch (error: any) {
-      setState(prev => ({
-        ...prev,
-        error: error.message
-      }));
+      setState(prev => ({ ...prev, error: error.message }));
     }
-  }, [logisticsId]);
+  }, [custodyId]);
 
-  // Obtener ubicación actual
   const getCurrentLocation = useCallback(async () => {
     try {
-      const location = await trackingWebSocketService.getCurrentLocation(logisticsId);
+      const location = await custodyWebSocketService.getCurrentLocation(custodyId);
       return location;
     } catch (error: any) {
-      setState(prev => ({
-        ...prev,
-        error: error.message
-      }));
+      setState(prev => ({ ...prev, error: error.message }));
       return null;
     }
-  }, [logisticsId]);
+  }, [custodyId]);
 
-  // Limpiar
   useEffect(() => {
     return () => {
       stopGeolocation();

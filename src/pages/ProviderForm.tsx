@@ -11,7 +11,6 @@ import {
   Typography,
   TextField,
   Button,
-  Grid,
   Container,
   Paper,
   CircularProgress,
@@ -203,15 +202,15 @@ export default function ProviderForm() {
   return (
     <Container maxWidth="md" sx={{ py: 3 }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 4 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: { xs: 'flex-start', sm: 'center' }, mb: 4, width: '100%', position: 'relative' }}>
         <Button
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate('/providers')}
-          sx={{ mr: 2, textTransform: 'none', display: { xs: 'none', sm: 'flex' } }}
+          sx={{ mr: 2, textTransform: 'none', display: { xs: 'none', sm: 'flex' }, position: 'absolute', left: 0 }}
         >
           Volver
         </Button>
-        <Typography variant="h4" component="h1" sx={{ fontWeight: 600 }}>
+        <Typography variant="h4" component="h1" sx={{ fontWeight: 600, textAlign: { xs: 'left', sm: 'center' } }}>
           {editId ? 'Editar Proveedor' : 'Nuevo Proveedor'}
         </Typography>
       </Box>
@@ -236,11 +235,11 @@ export default function ProviderForm() {
           <CircularProgress size={40} />
         </Box>
       ) : (
-        <Paper elevation={2} sx={{ p: 4, borderRadius: 2 }}>
+        <Paper elevation={2} sx={{ p: { xs: 2, sm: 4 }, borderRadius: 2, width: '100%', mx: 'auto' }}>
           <form onSubmit={handleSubmit(onSubmit)}>
             <Stack spacing={4}>
               {/* Información básica */}
-              <Box>
+              <Box sx={{ width: '100%' }}>
                 <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
                   Información Básica
                 </Typography>
@@ -248,8 +247,15 @@ export default function ProviderForm() {
                   Datos principales del proveedor
                 </Typography>
                 
-                <Grid container spacing={3}>
-                  <Grid item xs={12}>
+                <Box
+                  sx={{
+                    width: '100%',
+                    display: 'grid',
+                    gridTemplateColumns: { xs: '1fr', sm: '1fr' },
+                    rowGap: { xs: 2, sm: 3 },
+                  }}
+                >
+                  <Box>
                     <Controller
                       name="name"
                       control={control}
@@ -273,9 +279,9 @@ export default function ProviderForm() {
                         />
                       )}
                     />
-                  </Grid>
-                  
-                  <Grid item xs={12} sm={6}>
+                  </Box>
+
+                  <Box>
                     <Controller
                       name="type"
                       control={control}
@@ -300,9 +306,9 @@ export default function ProviderForm() {
                         </FormControl>
                       )}
                     />
-                  </Grid>
-                  
-                  <Grid item xs={12} sm={6}>
+                  </Box>
+
+                  <Box>
                     <Controller
                       name="location"
                       control={control}
@@ -318,14 +324,14 @@ export default function ProviderForm() {
                         />
                       )}
                     />
-                  </Grid>
-                </Grid>
+                  </Box>
+                </Box>
               </Box>
 
               <Divider />
 
               {/* Contacto y Capacidad */}
-              <Box>
+              <Box sx={{ width: '100%' }}>
                 <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
                   Contacto y Capacidad
                 </Typography>
@@ -333,8 +339,16 @@ export default function ProviderForm() {
                   Información de contacto y capacidad de manejo
                 </Typography>
                 
-                <Grid container spacing={3}>
-                  <Grid item xs={12} sm={6}>
+                <Box
+                  sx={{
+                    width: '100%',
+                    display: 'grid',
+                    gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' },
+                    rowGap: { xs: 2, sm: 3 },
+                    columnGap: { sm: 3 },
+                  }}
+                >
+                  <Box>
                     <Controller
                       name="capacity"
                       control={control}
@@ -356,9 +370,9 @@ export default function ProviderForm() {
                         />
                       )}
                     />
-                  </Grid>
-                  
-                  <Grid item xs={12} sm={6}>
+                  </Box>
+
+                  <Box>
                     <Controller
                       name="contact_whatsapp"
                       control={control}
@@ -374,9 +388,9 @@ export default function ProviderForm() {
                         />
                       )}
                     />
-                  </Grid>
-                  
-                  <Grid item xs={12} sm={6}>
+                  </Box>
+
+                  <Box>
                     <Controller
                       name="contact_email"
                       control={control}
@@ -392,9 +406,9 @@ export default function ProviderForm() {
                         />
                       )}
                     />
-                  </Grid>
-                  
-                  <Grid item xs={12} sm={6}>
+                  </Box>
+
+                  <Box>
                     <Controller
                       name="contact_phone"
                       control={control}
@@ -409,14 +423,14 @@ export default function ProviderForm() {
                         />
                       )}
                     />
-                  </Grid>
-                </Grid>
+                  </Box>
+                </Box>
               </Box>
 
               <Divider />
 
               {/* Notas y Estado */}
-              <Box>
+              <Box sx={{ width: '100%' }}>
                 <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
                   Información Adicional
                 </Typography>
@@ -424,8 +438,15 @@ export default function ProviderForm() {
                   Notas y configuración del proveedor
                 </Typography>
                 
-                <Grid container spacing={3}>
-                  <Grid item xs={12}>
+                <Box
+                  sx={{
+                    width: '100%',
+                    display: 'grid',
+                    gridTemplateColumns: { xs: '1fr', sm: '1fr' },
+                    rowGap: { xs: 2, sm: 3 },
+                  }}
+                >
+                  <Box>
                     <Controller
                       name="notes"
                       control={control}
@@ -442,9 +463,9 @@ export default function ProviderForm() {
                         />
                       )}
                     />
-                  </Grid>
-                  
-                  <Grid item xs={12}>
+                  </Box>
+
+                  <Box>
                     <Controller
                       name="active"
                       control={control}
@@ -462,8 +483,8 @@ export default function ProviderForm() {
                         />
                       )}
                     />
-                  </Grid>
-                </Grid>
+                  </Box>
+                </Box>
               </Box>
 
               {/* Actions */}

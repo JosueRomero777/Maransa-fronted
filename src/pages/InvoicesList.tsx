@@ -47,6 +47,7 @@ export default function InvoicesList() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [processing, setProcessing] = useState<number | null>(null); // ID de factura en procesamiento
 
   // Filtros
   const [packagerId, setPackagerId] = useState('');
@@ -64,7 +65,7 @@ export default function InvoicesList() {
   const loadPackagers = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/packagers`, {
+      const response = await fetch(`${API_BASE_URL}/packagers`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -91,7 +92,7 @@ export default function InvoicesList() {
       if (hasta) params.append('hasta', hasta.format('YYYY-MM-DD'));
 
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/invoicing/invoices?${params}`, {
+      const response = await fetch(`${API_BASE_URL}/invoicing/invoices?${params}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -111,7 +112,7 @@ export default function InvoicesList() {
   const handleViewInvoice = async (invoice: Invoice) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/invoicing/invoices/${invoice.id}/pdf`, {
+      const response = await fetch(`${API_BASE_URL}/invoicing/invoices/${invoice.id}/pdf`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -119,15 +120,17 @@ export default function InvoicesList() {
 
       if (!response.ok) throw new Error('Error al obtener PDF');
 
-      // Obtener el blob del PDF
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
+      const pdfBlob = await buildPdfBlob(response);
+      const url = window.URL.createObjectURL(pdfBlob);
       
       // Abrir en nueva pestaña
-      window.open(url, '_blank');
+      const newWindow = window.open(url, '_blank');
+      if (!newWindow) {
+        throw new Error('El navegador bloqueó la ventana del PDF. Intenta permitir popups.');
+      }
       
       // Limpiar después de un tiempo
-      setTimeout(() => window.URL.revokeObjectURL(url), 100);
+      setTimeout(() => window.URL.revokeObjectURL(url), 60000);
     } catch (err: any) {
       setError(err.message);
     }
@@ -143,27 +146,10 @@ export default function InvoicesList() {
 
   const handleEmitInvoice = async (id: number) => {
     try {
+      setProcessing(id);
+      setError(null);
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/invoicing/invoices/${id}/emit`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) throw new Error('Error al emitir factura');
-
-      loadInvoices();
-    } catch (err: any) {
-      setError(err.message);
-    }
-  };
-
-  const handleSignAndAuthorize = async (id: number) => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/invoicing/invoices/${id}/sign-and-authorize`, {
+      const response = await fetch(`${API_BASE_URL}/invoicing/invoices/${id}/emit`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -172,21 +158,48 @@ export default function InvoicesList() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Error al firmar y autorizar factura');
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Error al emitir factura');
       }
 
-      loadInvoices();
-      setError(null);
+      await loadInvoices();
     } catch (err: any) {
       setError(err.message);
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  const handleSignAndAuthorize = async (id: number) => {
+    try {
+      setProcessing(id);
+      setError(null);
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/invoicing/invoices/${id}/sign-and-authorize`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Error al firmar y autorizar factura');
+      }
+
+      await loadInvoices();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setProcessing(null);
     }
   };
 
   const handleDownloadPdf = async (id: number, numeroFactura: string) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/invoicing/invoices/${id}/pdf`, {
+      const response = await fetch(`${API_BASE_URL}/invoicing/invoices/${id}/pdf`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -194,17 +207,64 @@ export default function InvoicesList() {
 
       if (!response.ok) throw new Error('Error al descargar PDF');
 
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
+      const pdfBlob = await buildPdfBlob(response);
+      const url = window.URL.createObjectURL(pdfBlob);
       const a = document.createElement('a');
       a.href = url;
       a.download = `factura_${numeroFactura}.pdf`;
       document.body.appendChild(a);
       a.click();
-      window.URL.revokeObjectURL(url);
+      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
       document.body.removeChild(a);
     } catch (err: any) {
       setError(err.message);
+    }
+  };
+
+  const formatAutorizacion = (value?: string) => {
+    if (!value) return '-';
+    if (value.length <= 10) return value;
+    return `${value.slice(0, 10)}...`;
+  };
+
+  const buildPdfBlob = async (response: Response) => {
+    const buffer = await response.arrayBuffer();
+    const headerBytes = new Uint8Array(buffer.slice(0, 4));
+    const headerText = String.fromCharCode(...headerBytes);
+
+    if (headerText === '%PDF') {
+      return new Blob([buffer], { type: 'application/pdf' });
+    }
+
+    const text = new TextDecoder().decode(buffer);
+    let decodedString: string | null = null;
+
+    if (text.trim().startsWith('"')) {
+      try {
+        decodedString = JSON.parse(text);
+      } catch {
+        decodedString = null;
+      }
+    }
+
+    if (decodedString && decodedString.startsWith('%PDF')) {
+      const byteArray = new Uint8Array(decodedString.length);
+      for (let i = 0; i < decodedString.length; i += 1) {
+        byteArray[i] = decodedString.charCodeAt(i) & 0xff;
+      }
+      return new Blob([byteArray], { type: 'application/pdf' });
+    }
+
+    const preview = (decodedString || text || '').slice(0, 200);
+    throw new Error(`Respuesta no es PDF: ${preview || 'sin detalle'}`);
+  };
+
+  const copyAutorizacion = async (value?: string) => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch (err) {
+      console.error('No se pudo copiar el numero de autorizacion', err);
     }
   };
 
@@ -255,9 +315,12 @@ export default function InvoicesList() {
         <Stack 
           spacing={2}
           direction={{ xs: 'column', md: 'row' }}
-          sx={{ alignItems: { xs: 'stretch', md: 'flex-end' } }}
+          sx={{ 
+            alignItems: { xs: 'stretch', md: 'flex-end' },
+            justifyContent: (packagerId || estado || desde || hasta) ? 'flex-start' : 'stretch'
+          }}
         >
-          <Box sx={{ minWidth: { xs: '100%', md: 240 }, flex: { xs: 'auto', md: '0 0 auto' } }}>
+          <Box sx={{ minWidth: { xs: '100%', md: 240 }, flex: 1 }}>
             <TextField
               fullWidth
               select
@@ -274,7 +337,7 @@ export default function InvoicesList() {
             </TextField>
           </Box>
 
-          <Box sx={{ minWidth: 200, flex: '0 0 auto' }}>
+          <Box sx={{ minWidth: 200, flex: 1 }}>
             <TextField
               fullWidth
               select
@@ -291,7 +354,7 @@ export default function InvoicesList() {
             </TextField>
           </Box>
 
-          <Box sx={{ minWidth: 220, flex: '0 0 auto' }}>
+          <Box sx={{ minWidth: 220, flex: 1 }}>
             <DatePicker
               label="Fecha Desde"
               value={desde}
@@ -315,7 +378,7 @@ export default function InvoicesList() {
             />
           </Box>
 
-          <Box sx={{ minWidth: 220, flex: '0 0 auto' }}>
+          <Box sx={{ minWidth: 220, flex: 1 }}>
             <DatePicker
               label="Fecha Hasta"
               value={hasta}
@@ -349,6 +412,7 @@ export default function InvoicesList() {
               }}
               color="primary"
               sx={{ 
+                alignSelf: 'center',
                 backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.1),
                 '&:hover': {
                   backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.2),
@@ -364,6 +428,12 @@ export default function InvoicesList() {
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
           {error}
+        </Alert>
+      )}
+
+      {processing && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Procesando factura... Esto puede tardar hasta 1 minuto. Por favor espere.
         </Alert>
       )}
 
@@ -391,16 +461,29 @@ export default function InvoicesList() {
                     size="small"
                   />
                 </Box>
+                {invoice.numeroAutorizacion && (
+                  <Tooltip title="Copiar autorizacion">
+                    <Typography
+                      variant="caption"
+                      display="block"
+                      color="text.secondary"
+                      sx={{ cursor: 'pointer' }}
+                      onClick={() => copyAutorizacion(invoice.numeroAutorizacion)}
+                    >
+                      Autorizacion: {formatAutorizacion(invoice.numeroAutorizacion)}
+                    </Typography>
+                  </Tooltip>
+                )}
                 <Typography variant="caption" color="text.secondary">
                   {formatDate(invoice.fechaEmision)}
                 </Typography>
                 <Typography variant="caption" display="block" color="text.secondary">
-                  {invoice.empacadora?.nombre || 'N/A'}
+                  {invoice.packager?.name || 'N/A'}
                 </Typography>
                 <Divider sx={{ my: 1 }} />
                 <Box sx={{ mb: 1 }}>
                   <Typography variant="caption" color="text.secondary">Total</Typography>
-                  <Typography variant="h6">{formatCurrency(invoice.totalFactura)}</Typography>
+                  <Typography variant="h6">{formatCurrency(invoice.total)}</Typography>
                 </Box>
                 <Stack spacing={1} direction="row" sx={{ justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                   <Tooltip title="Ver">
@@ -431,16 +514,6 @@ export default function InvoicesList() {
                       </Tooltip>
                     </>
                   )}
-                  {(invoice.estado === 'EMITIDA' || invoice.estado === 'AUTORIZADA_SRI') && (
-                    <Tooltip title="Registrar Pago">
-                      <IconButton 
-                        size="small" 
-                        onClick={() => handleRegisterPayment(invoice.id)}
-                      >
-                        <AttachMoney fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  )}
                   <Tooltip title="Descargar PDF">
                     <IconButton 
                       size="small" 
@@ -461,6 +534,7 @@ export default function InvoicesList() {
             <TableHead>
               <TableRow sx={{ backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.05) }}>
                 <TableCell sx={{ fontWeight: 600 }}>Número</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Autorizacion</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Fecha</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Empacadora</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Estado</TableCell>
@@ -473,7 +547,7 @@ export default function InvoicesList() {
             <TableBody>
               {invoices.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} align="center" sx={{ py: 3 }}>
+                  <TableCell colSpan={9} align="center" sx={{ py: 3 }}>
                     No hay facturas
                   </TableCell>
                 </TableRow>
@@ -481,6 +555,21 @@ export default function InvoicesList() {
                 invoices.map((invoice) => (
                   <TableRow key={invoice.id} sx={{ '&:hover': { backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.02) } }}>
                     <TableCell>{invoice.numeroFactura}</TableCell>
+                    <TableCell>
+                      {invoice.numeroAutorizacion ? (
+                        <Tooltip title="Copiar autorizacion">
+                          <Typography
+                            variant="body2"
+                            sx={{ cursor: 'pointer' }}
+                            onClick={() => copyAutorizacion(invoice.numeroAutorizacion)}
+                          >
+                            {formatAutorizacion(invoice.numeroAutorizacion)}
+                          </Typography>
+                        </Tooltip>
+                      ) : (
+                        '-'
+                      )}
+                    </TableCell>
                     <TableCell>{formatDate(invoice.fechaEmision)}</TableCell>
                     <TableCell>{invoice.packager?.name || '-'}</TableCell>
                     <TableCell>
@@ -508,8 +597,13 @@ export default function InvoicesList() {
                             </IconButton>
                           </Tooltip>
                           <Tooltip title="Emitir">
-                            <IconButton size="small" color="success" onClick={() => handleEmitInvoice(invoice.id)}>
-                              <CheckCircle />
+                            <IconButton 
+                              size="small" 
+                              color="success" 
+                              onClick={() => handleEmitInvoice(invoice.id)}
+                              disabled={processing === invoice.id}
+                            >
+                              {processing === invoice.id ? <CircularProgress size={20} /> : <CheckCircle />}
                             </IconButton>
                           </Tooltip>
                         </>
@@ -517,13 +611,14 @@ export default function InvoicesList() {
 
                       {invoice.estado === 'EMITIDA' && (
                         <>
-                          <Tooltip title="Firmar y Autorizar">
+                          <Tooltip title="Firmar y Autorizar con SRI">
                             <IconButton
                               size="small"
                               color="success"
                               onClick={() => handleSignAndAuthorize(invoice.id)}
+                              disabled={processing === invoice.id}
                             >
-                              <CheckCircle />
+                              {processing === invoice.id ? <CircularProgress size={20} /> : <CheckCircle />}
                             </IconButton>
                           </Tooltip>
                         </>
@@ -541,14 +636,6 @@ export default function InvoicesList() {
                             </IconButton>
                           </Tooltip>
                         </>
-                      )}
-
-                      {(invoice.estado === 'EMITIDA' || invoice.estado === 'AUTORIZADA_SRI') && (
-                        <Tooltip title="Registrar Pago">
-                          <IconButton size="small" color="primary" onClick={() => handleRegisterPayment(invoice.id)}>
-                            <AttachMoney />
-                          </IconButton>
-                        </Tooltip>
                       )}
                     </TableCell>
                   </TableRow>
