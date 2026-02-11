@@ -15,7 +15,7 @@ class CustodyWebSocketService {
       }
 
       const wsBaseUrl = import.meta.env.VITE_WS_URL || API_BASE_URL.replace('/api', '');
-      const socketUrl = `${wsBaseUrl}/custody-tracking`;
+      const socketUrl = wsBaseUrl ? `${wsBaseUrl}/custody-tracking` : '/custody-tracking';
 
       this.socket = io(socketUrl, {
         auth: { token },

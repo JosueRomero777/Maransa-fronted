@@ -16,7 +16,7 @@ class TrackingWebSocketService {
 
       // URL base para WebSocket (opcional VITE_WS_URL)
       const wsBaseUrl = import.meta.env.VITE_WS_URL || API_BASE_URL.replace('/api', '');
-      const socketUrl = `${wsBaseUrl}/tracking`;
+      const socketUrl = wsBaseUrl ? `${wsBaseUrl}/tracking` : '/tracking';
 
       this.socket = io(socketUrl, {
         auth: {
