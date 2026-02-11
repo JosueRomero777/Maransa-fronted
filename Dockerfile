@@ -3,6 +3,11 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install --legacy-peer-deps
 COPY . .
+
+# Eliminar archivo .env local para evitar que se usen variables de desarrollo (localhost)
+# Esto fuerza a usar el fallback del código o variables de entorno reales
+RUN rm -f .env
+
 ARG VITE_API_URL
 ENV VITE_API_URL=$VITE_API_URL
 RUN npm run build
