@@ -9,11 +9,11 @@ import {
   Business as BusinessIcon, 
   People as PeopleIcon,
   ShoppingCart as OrdersIcon,
-  LocalShipping as ReceptionIcon,
+  Warehouse as ReceptionIcon,
   Science as LaboratoryIcon,
   LocalShipping as LogisticsIcon,
   Security as CustodyIcon,
-  Agriculture as HarvestIcon,
+  SetMeal as HarvestIcon,
   History as LogsIcon,
   Receipt as InvoiceIcon,
   TrendingUp as EstimationsIcon,
@@ -771,7 +771,7 @@ const AppLayout = React.memo(() => {
 
   const menuItems = React.useMemo(() => {
     const allItems = [
-      { text: 'Inicio', path: '/home', icon: <HomeIcon />, roles: ['ADMIN', 'GERENCIA'] },
+      { text: 'Inicio', path: '/home', icon: <HomeIcon />, roles: ['ADMIN', 'GERENCIA', 'COMPRAS', 'LABORATORIO', 'LOGISTICA', 'CUSTODIA', 'FACTURACION'] },
     ];
 
     // Usuarios (solo ADMIN)
@@ -997,7 +997,7 @@ const AppLayout = React.memo(() => {
             </ProtectedRoute>
           } />
           <Route path="/home" element={
-            <ProtectedRoute requiredRoles={['ADMIN', 'GERENCIA']}>
+            <ProtectedRoute>
               <Home />
             </ProtectedRoute>
           } />

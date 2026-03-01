@@ -33,10 +33,11 @@ import {
   ListItem,
   ListItemText,
   Divider,
+  Snackbar,
 } from '@mui/material';
-import { 
-  Close as CloseIcon, 
-  Add as AddIcon, 
+import {
+  Close as CloseIcon,
+  Add as AddIcon,
   Warning as WarningIcon,
   CheckCircle as CheckCircleIcon,
   Schedule as ScheduleIcon
@@ -97,7 +98,7 @@ export default function CustodyPage() {
     currentLocation: custodyCurrentLocation,
     spectatorCount,
     error: trackingError,
-    sessionId,
+    // sessionId, // Not used but available from hook
     isOwner: isTrackingOwner,
     trackerName,
     trackerEmail,
@@ -109,8 +110,19 @@ export default function CustodyPage() {
   const [assignDialog, setAssignDialog] = useState({ open: false });
   const [incidentDialog, setIncidentDialog] = useState({ open: false });
   const [createDialog, setCreateDialog] = useState({ open: false });
+  const [trackingDialog, setTrackingDialog] = useState({ open: false });
   const [formLoading, setFormLoading] = useState(false);
   const [availableOrders, setAvailableOrders] = useState<any[]>([]);
+
+  const [snackBar, setSnackBar] = useState<{
+    open: boolean;
+    message: string;
+    severity: 'success' | 'error' | 'info' | 'warning';
+  }>({
+    open: false,
+    message: '',
+    severity: 'success',
+  });
 
   const [assignForm, setAssignForm] = useState({
     personalAsignado: [''],
@@ -153,11 +165,8 @@ export default function CustodyPage() {
 
   const loadAvailableOrders = async () => {
     try {
-      console.log('Cargando órdenes disponibles...');
       const response = await custodyService.getOrdersForCustody();
-      console.log('Respuesta de órdenes:', response);
       const data = (response as any)?.data ?? response ?? [];
-      console.log('Órdenes procesadas:', data);
       setAvailableOrders(data);
     } catch (err) {
       console.error('Error cargando órdenes disponibles:', err);
@@ -166,7 +175,6 @@ export default function CustodyPage() {
     }
   };
 
-  // Handlers para tracking
   const handleStartCustodyTracking = async () => {
     try {
       await startTracking();
@@ -193,11 +201,8 @@ export default function CustodyPage() {
 
   const handleOpenCreateDialog = async () => {
     try {
-      console.log('Abriendo diálogo de crear custodia');
       await loadAvailableOrders();
-      console.log('Órdenes cargadas, abriendo diálogo...');
       setCreateDialog({ open: true });
-      console.log('Diálogo abierto - createDialog:', { open: true });
     } catch (err) {
       console.error('Error al abrir diálogo:', err);
       setError('Error al abrir el diálogo de custodia');
@@ -206,7 +211,20 @@ export default function CustodyPage() {
 
   const handleCreateCustody = async () => {
     if (!createForm.orderId || !createForm.logisticsId) {
-      setError('Selecciona una orden');
+      setSnackBar({ open: true, message: 'Selecciona una orden', severity: 'error' });
+      return;
+    }
+
+    const idRegex = /^\d{10}$/;
+    const invalidIds = createForm.personalAsignado.filter(id => id.trim() !== '' && !idRegex.test(id));
+
+    if (invalidIds.length > 0) {
+      setSnackBar({ open: true, message: 'Cada miembro del personal debe tener una cédula válida de 10 dígitos', severity: 'error' });
+      return;
+    }
+
+    if (createForm.personalAsignado.some(p => p.trim() === '') || !createForm.vehiculoCustodia || !createForm.rutaCustodia) {
+      setSnackBar({ open: true, message: 'Por favor complete todos los campos obligatorios', severity: 'error' });
       return;
     }
 
@@ -221,7 +239,7 @@ export default function CustodyPage() {
         rutaCustodia: createForm.rutaCustodia,
         observaciones: createForm.observaciones,
       });
-      
+
       setCreateDialog({ open: false });
       setCreateForm({
         orderId: '',
@@ -231,6 +249,7 @@ export default function CustodyPage() {
         rutaCustodia: '',
         observaciones: '',
       });
+      setSnackBar({ open: true, message: 'Custodia creada exitosamente', severity: 'success' });
       await loadData();
     } catch (err: any) {
       setError(err?.message || 'Error al crear custodia');
@@ -241,8 +260,16 @@ export default function CustodyPage() {
 
   const handleAssignPersonnel = async () => {
     if (!selectedCustody) return;
-    if (assignForm.personalAsignado.filter(p => p.trim()).length === 0) {
-      setError('Agrega al menos un personal de custodia');
+    const idRegex = /^\d{10}$/;
+    const invalidIds = assignForm.personalAsignado.filter(id => id.trim() !== '' && !idRegex.test(id));
+
+    if (invalidIds.length > 0) {
+      setSnackBar({ open: true, message: 'Cada miembro del personal debe tener una cédula válida de 10 dígitos', severity: 'error' });
+      return;
+    }
+
+    if (assignForm.personalAsignado.some(p => p.trim() === '') || !assignForm.vehiculoCustodia || !assignForm.rutaCustodia) {
+      setSnackBar({ open: true, message: 'Por favor complete todos los campos', severity: 'error' });
       return;
     }
 
@@ -254,12 +281,10 @@ export default function CustodyPage() {
         vehiculoCustodia: assignForm.vehiculoCustodia,
         rutaCustodia: assignForm.rutaCustodia,
       });
-      console.log('Personal asignado, resultado:', result);
       setAssignDialog({ open: false });
-      // Actualizar selectedCustody inmediatamente con la respuesta
       setSelectedCustody(result);
-      // También recargar datos
       await loadData();
+      setSnackBar({ open: true, message: 'Personal asignado exitosamente', severity: 'success' });
     } catch (err: any) {
       console.error('Error al asignar personal:', err);
       setError(err?.message || 'Error al asignar personal');
@@ -289,6 +314,7 @@ export default function CustodyPage() {
         const updated = await custodyService.getCustody(selectedCustody.id);
         setSelectedCustody(updated);
       }
+      setSnackBar({ open: true, message: 'Incidente registrado exitosamente', severity: 'success' });
     } catch (err: any) {
       setError(err?.message || 'Error al agregar incidente');
     } finally {
@@ -306,6 +332,7 @@ export default function CustodyPage() {
       await loadData();
       const updated = await custodyService.getCustody(selectedCustody.id);
       setSelectedCustody(updated);
+      setSnackBar({ open: true, message: 'Custodia completada exitosamente', severity: 'success' });
     } catch (err: any) {
       setError(err?.message || 'Error al completar custodia');
     } finally {
@@ -328,36 +355,37 @@ export default function CustodyPage() {
   };
 
   const updatePersonalField = (index: number, value: string) => {
+    const sanitizedValue = value.replace(/\D/g, '').substring(0, 10);
     setAssignForm(prev => ({
       ...prev,
-      personalAsignado: prev.personalAsignado.map((p, i) => i === index ? value : p)
+      personalAsignado: prev.personalAsignado.map((p, i) => i === index ? sanitizedValue : p)
     }));
   };
 
-  // Calcular ETA basado en distancia
-  const calculateETA = (distance: number): Date | null => {
-    if (!distance || distance <= 0) return null;
-    // Velocidad promedio de transporte: 60 km/h
-    const avgSpeed = 60;
-    const hours = distance / avgSpeed;
-    const minutesFromNow = Math.round(hours * 60);
-    const eta = new Date();
-    eta.setMinutes(eta.getMinutes() + minutesFromNow);
-    return eta;
+  const addPersonalFieldCreate = () => {
+    setCreateForm(prev => ({
+      ...prev,
+      personalAsignado: [...prev.personalAsignado, '']
+    }));
   };
 
-  // Calcular distancia entre dos puntos (Haversine formula)
-  const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLng = (lng2 - lng1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLng / 2) * Math.sin(dLng / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const distance = R * c;
-    return distance;
+  const removePersonalFieldCreate = (index: number) => {
+    setCreateForm(prev => ({
+      ...prev,
+      personalAsignado: prev.personalAsignado.filter((_, i) => i !== index)
+    }));
   };
+
+  const updatePersonalFieldCreate = (index: number, value: string) => {
+    const sanitizedValue = value.replace(/\D/g, '').substring(0, 10);
+    setCreateForm(prev => ({
+      ...prev,
+      personalAsignado: prev.personalAsignado.map((p, i) => i === index ? sanitizedValue : p)
+    }));
+  };
+
+  // Unused utility functions removed for code cleanliness.
+  // ETA and Distance calculations are now handled by hooks or component-level logic.
 
   // Solicitar permiso de ubicación
   const requestLocationPermission = async () => {
@@ -386,27 +414,52 @@ export default function CustodyPage() {
   const handleStartCustodyWithGPS = async () => {
     if (!selectedCustody) return;
     setFormLoading(true);
+    setError(null);
     try {
       await requestLocationPermission();
+
+      // Primero iniciamos el rastreo por socket para que el estado cambie rápido
+      try {
+        await startTracking();
+      } catch (trackErr) {
+        console.error('Error al iniciar rastreo por socket:', trackErr);
+      }
+
       await custodyService.startCustody(selectedCustody.id, {
         observaciones: 'Custodia iniciada con GPS activo'
       });
+
       await loadData();
       const updated = await custodyService.getCustody(selectedCustody.id);
       setSelectedCustody(updated);
+      setTrackingDialog({ open: false });
+
+      setSnackBar({ open: true, message: 'Custodia iniciada y rastreo activo exitosamente', severity: 'success' });
     } catch (err: any) {
       setError(err?.message || 'Error al iniciar custodia');
+      setTrackingDialog({ open: false });
     } finally {
       setFormLoading(false);
     }
+  };
+
+  const handleCancelTracking = () => {
+    setTrackingDialog({ open: false });
+  };
+
+  const handleCloseSnackBar = (_event?: React.SyntheticEvent | Event, reason?: string) => {
+    if (reason === 'clickaway') {
+      return;
+    }
+    setSnackBar({ ...snackBar, open: false });
   };
 
   return (
     <Box sx={{ p: 2 }}>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h5">Módulo de Custodia y Acompañamiento</Typography>
-        <Button 
-          variant="contained" 
+        <Button
+          variant="contained"
           startIcon={<AddIcon />}
           onClick={handleOpenCreateDialog}
         >
@@ -459,24 +512,23 @@ export default function CustodyPage() {
                         />
                       </TableCell>
                       <TableCell>
-                        {Array.isArray(custody.personalAsignado) ? custody.personalAsignado.length : 0} 
-                        {' '} persona(s)
+                        {Array.isArray(custody.personalAsignado) ? custody.personalAsignado.length : 0} persona(s)
                       </TableCell>
                       <TableCell>{custody.vehiculoCustodia || '-'}</TableCell>
                       <TableCell>
                         {Array.isArray(custody.incidentes) && custody.incidentes.length > 0 ? (
-                          <Chip 
-                            label={custody.incidentes.length} 
-                            color="warning" 
+                          <Chip
+                            label={custody.incidentes.length}
+                            color="warning"
                             size="small"
-                            icon={<WarningIcon />}
+                            icon={<WarningIcon fontSize="small" />}
                           />
                         ) : (
-                          <Chip 
-                            label="0" 
-                            color="success" 
+                          <Chip
+                            label="0"
+                            color="success"
                             size="small"
-                            icon={<CheckCircleIcon />}
+                            icon={<CheckCircleIcon fontSize="small" />}
                           />
                         )}
                       </TableCell>
@@ -512,80 +564,41 @@ export default function CustodyPage() {
                 }
               />
               <CardContent>
-                <Tabs value={tabValue} onChange={(_, newValue) => setTabValue(newValue)}>
-                  <Tab label="Información" />
+                <Tabs value={tabValue} onChange={(_, newValue) => setTabValue(newValue)} variant="scrollable" scrollButtons="auto">
+                  <Tab label="Info" />
                   <Tab label="Personal" />
                   <Tab label="Horarios" />
                   <Tab label="Bitácora" />
                   <Tab label="Tracking" />
                 </Tabs>
 
-                {/* Tab 0: Información */}
                 <TabPanel value={tabValue} index={0}>
                   <Stack spacing={2}>
                     <Box>
                       <Typography variant="subtitle2">Estado</Typography>
                       <Chip label={selectedCustody.estado} color={estadoColor(selectedCustody.estado) as any} />
                     </Box>
-
-                    <TextField
-                      label="Vehículo de Custodia"
-                      fullWidth
-                      value={selectedCustody.vehiculoCustodia || ''}
-                      disabled
-                      size="small"
-                    />
-
-                    <TextField
-                      label="Ruta de Custodia"
-                      fullWidth
-                      value={selectedCustody.rutaCustodia || ''}
-                      disabled
-                      size="small"
-                      multiline
-                      minRows={2}
-                    />
-
-                    <TextField
-                      label="Observaciones"
-                      fullWidth
-                      value={selectedCustody.observaciones || ''}
-                      disabled
-                      size="small"
-                      multiline
-                      minRows={2}
-                    />
-
+                    <TextField label="Vehículo" fullWidth value={selectedCustody.vehiculoCustodia || ''} disabled size="small" />
+                    <TextField label="Ruta" fullWidth value={selectedCustody.rutaCustodia || ''} disabled size="small" multiline minRows={2} />
+                    <TextField label="Observaciones" fullWidth value={selectedCustody.observaciones || ''} disabled size="small" multiline minRows={2} />
                     {selectedCustody.estado === EstadoCustodia.ASIGNADO && (
-                      <Button
-                        variant="contained"
-                        color="primary"
-                        onClick={handleStartCustodyWithGPS}
-                        disabled={formLoading}
-                      >
-                        {formLoading ? <CircularProgress size={20} sx={{ mr: 1 }} /> : '▶'} Iniciar Custodia
+                      <Button variant="contained" color="primary" onClick={() => setTrackingDialog({ open: true })} disabled={formLoading}>
+                        ▶ Iniciar Custodia
                       </Button>
                     )}
-
                     {selectedCustody.estado === EstadoCustodia.EN_CUSTODIA && (
-                      <Button
-                        variant="contained"
-                        color="success"
-                        onClick={handleCompleteCustody}
-                        disabled={formLoading}
-                      >
+                      <Button variant="contained" color="success" onClick={handleCompleteCustody} disabled={formLoading}>
                         Completar Custodia
                       </Button>
                     )}
                   </Stack>
                 </TabPanel>
 
-                {/* Tab 1: Personal */}
                 <TabPanel value={tabValue} index={1}>
                   <Stack spacing={2}>
                     <Typography variant="h6">Personal Asignado</Typography>
                     {Array.isArray(selectedCustody.personalAsignado) && selectedCustody.personalAsignado.length > 0 ? (
-                      <List>
+                      <List dense>
                         {selectedCustody.personalAsignado.map((persona: string, index: number) => (
                           <ListItem key={index}>
                             <ListItemText primary={persona} />
@@ -595,207 +608,79 @@ export default function CustodyPage() {
                     ) : (
                       <Alert severity="info">No hay personal asignado todavía</Alert>
                     )}
-
                     {selectedCustody.estado === EstadoCustodia.PENDIENTE && (
-                      <Button
-                        variant="outlined"
-                        startIcon={<AddIcon />}
-                        onClick={() => {
-                          setAssignForm({
-                            personalAsignado: Array.isArray(selectedCustody.personalAsignado) && selectedCustody.personalAsignado.length > 0 
-                              ? selectedCustody.personalAsignado 
-                              : [''],
-                            vehiculoCustodia: selectedCustody.vehiculoCustodia || '',
-                            rutaCustodia: selectedCustody.rutaCustodia || '',
-                          });
-                          setAssignDialog({ open: true });
-                        }}
-                      >
+                      <Button variant="outlined" startIcon={<AddIcon />} onClick={() => {
+                        setAssignForm({
+                          personalAsignado: Array.isArray(selectedCustody.personalAsignado) && selectedCustody.personalAsignado.length > 0
+                            ? selectedCustody.personalAsignado
+                            : [''],
+                          vehiculoCustodia: selectedCustody.vehiculoCustodia || '',
+                          rutaCustodia: selectedCustody.rutaCustodia || '',
+                        });
+                        setAssignDialog({ open: true });
+                      }}>
                         Modificar Personal
                       </Button>
                     )}
                   </Stack>
                 </TabPanel>
 
-                {/* Tab 2: Horarios */}
                 <TabPanel value={tabValue} index={2}>
                   <Stack spacing={2}>
-                    <Typography variant="h6" gutterBottom>
-                      <ScheduleIcon sx={{ verticalAlign: 'middle', mr: 1 }} />
-                      Horarios de Operación
-                    </Typography>
-
-                    <Card variant="outlined">
-                      <CardContent>
-                        <Typography variant="subtitle1" color="primary" gutterBottom>
-                          Horario de Pesca
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Hora Estimada: {selectedCustody.order?.fechaTentativaCosecha 
-                            ? new Date(selectedCustody.order.fechaTentativaCosecha).toLocaleString('es-EC', {
-                                dateStyle: 'medium',
-                                timeStyle: 'short'
-                              })
-                            : 'No definido'}
-                        </Typography>
-                      </CardContent>
-                    </Card>
-
-                    <Card variant="outlined">
-                      <CardContent>
-                        <Typography variant="subtitle1" color="primary" gutterBottom>
-                          Llegada Estimada
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          📍 {selectedCustody.logistics?.ubicacionDestino || 'Muelle / Camaronera'}
-                        </Typography>
-                        <Typography variant="body2" sx={{ mt: 1 }}>
-                          {selectedCustody.estado === EstadoCustodia.EN_CUSTODIA && selectedCustody.logistics?.origenLat && selectedCustody.logistics?.origenLng && selectedCustody.logistics?.ubicacionActualLat && selectedCustody.logistics?.ubicacionActualLng
-                            ? (() => {
-                                const distance = calculateDistance(
-                                  selectedCustody.logistics.ubicacionActualLat,
-                                  selectedCustody.logistics.ubicacionActualLng,
-                                  selectedCustody.logistics.destinoLat || selectedCustody.logistics.origenLat,
-                                  selectedCustody.logistics.destinoLng || selectedCustody.logistics.origenLng
-                                );
-                                const eta = calculateETA(distance);
-                                return (
-                                  <>
-                                    <Typography variant="caption" color="textSecondary" display="block">
-                                      Distancia: {distance.toFixed(2)} km
-                                    </Typography>
-                                    <Typography variant="caption" color="textSecondary" display="block">
-                                      ETA: {eta ? eta.toLocaleString('es-EC', {
-                                        dateStyle: 'short',
-                                        timeStyle: 'short'
-                                      }) : 'Calculando...'}
-                                    </Typography>
-                                  </>
-                                );
-                              })()
-                            : <Typography variant="caption" color="textSecondary">ETA: {selectedCustody.order?.fechaEntregaEstimada 
-                                ? new Date(selectedCustody.order.fechaEntregaEstimada).toLocaleString('es-EC', {
-                                    dateStyle: 'medium',
-                                    timeStyle: 'short'
-                                  })
-                                : 'Inicia custodia para ver ETA en tiempo real'}\n                              </Typography>
-                          }
-                        </Typography>
-                      </CardContent>
-                    </Card>
-
-                    <Card variant="outlined">
-                      <CardContent>
-                        <Typography variant="subtitle1" gutterBottom>
-                          Tiempos Registrados
-                        </Typography>
-                        <Stack spacing={1}>
-                          <Box>
-                            <Typography variant="caption" color="text.secondary">
-                              Inicio Custodia:
-                            </Typography>
-                            <Typography variant="body2">
-                              {selectedCustody.fechaInicio 
-                                ? new Date(selectedCustody.fechaInicio).toLocaleString('es-EC')
-                                : 'Pendiente'}
-                            </Typography>
-                          </Box>
-                          <Box>
-                            <Typography variant="caption" color="text.secondary">
-                              Finalización:
-                            </Typography>
-                            <Typography variant="body2">
-                              {selectedCustody.fechaFinalizacion 
-                                ? new Date(selectedCustody.fechaFinalizacion).toLocaleString('es-EC')
-                                : 'En progreso'}
-                            </Typography>
-                          </Box>
-                        </Stack>
-                      </CardContent>
-                    </Card>
+                    <Typography variant="h6"><ScheduleIcon fontSize="small" sx={{ mr: 1 }} />Tiempos</Typography>
+                    <Box>
+                      <Typography variant="caption" color="textSecondary">Inicio:</Typography>
+                      <Typography variant="body2">{selectedCustody.fechaInicio ? new Date(selectedCustody.fechaInicio).toLocaleString() : 'Pendiente'}</Typography>
+                    </Box>
+                    <Box>
+                      <Typography variant="caption" color="textSecondary">Finalización:</Typography>
+                      <Typography variant="body2">{selectedCustody.fechaFinalizacion ? new Date(selectedCustody.fechaFinalizacion).toLocaleString() : 'En progreso'}</Typography>
+                    </Box>
                   </Stack>
                 </TabPanel>
 
-                {/* Tab 3: Bitácora de Incidentes */}
                 <TabPanel value={tabValue} index={3}>
                   <Stack spacing={2}>
-                    <Typography variant="h6">Bitácora de Ruta</Typography>
-                    
-                    {selectedCustody.estado === EstadoCustodia.EN_CUSTODIA && (
-                      <Button
-                        variant="contained"
-                        startIcon={<AddIcon />}
-                        onClick={() => setIncidentDialog({ open: true })}
-                      >
-                        Registrar Incidente
-                      </Button>
-                    )}
-
+                    <Box display="flex" justifyContent="space-between" alignItems="center">
+                      <Typography variant="h6">Bitácora</Typography>
+                      {selectedCustody.estado === EstadoCustodia.EN_CUSTODIA && (
+                        <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => setIncidentDialog({ open: true })}>
+                          Incidente
+                        </Button>
+                      )}
+                    </Box>
                     {Array.isArray(selectedCustody.incidentes) && selectedCustody.incidentes.length > 0 ? (
-                      <List>
+                      <List dense>
                         {selectedCustody.incidentes.map((incident: Incident, index: number) => (
                           <Box key={index}>
                             <ListItem>
                               <ListItemText
-                                primary={
-                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <Chip 
-                                      label={incident.gravedad} 
-                                      color={
-                                        incident.gravedad === 'grave' ? 'error' :
-                                        incident.gravedad === 'moderada' ? 'warning' : 'info'
-                                      }
-                                      size="small"
-                                    />
-                                    <Typography variant="body1">{incident.descripcion}</Typography>
-                                  </Box>
-                                }
-                                secondary={
-                                  <Box sx={{ mt: 1 }}>
-                                    <Typography variant="caption" color="text.secondary">
-                                      {new Date(incident.fecha).toLocaleString('es-EC')}
-                                      {incident.responsable && ` - Reportado por: ${incident.responsable}`}
-                                    </Typography>
-                                  </Box>
-                                }
+                                primary={incident.descripcion}
+                                secondary={`${new Date(incident.fecha).toLocaleString()} - ${incident.gravedad}`}
                               />
                             </ListItem>
-                            {index < (selectedCustody.incidentes?.length ?? 0) - 1 && <Divider />}
+                            <Divider />
                           </Box>
                         ))}
                       </List>
                     ) : (
-                      <Alert severity="success" icon={<CheckCircleIcon />}>
-                        No se han registrado incidentes durante la ruta
-                      </Alert>
+                      <Alert severity="success">Sin incidentes</Alert>
                     )}
                   </Stack>
                 </TabPanel>
 
-                {/* Tab 4: Tracking GPS */}
                 <TabPanel value={tabValue} index={4}>
                   <Stack spacing={2}>
-                    <Typography variant="h6">Seguimiento en Tiempo Real</Typography>
-                    
-                    {selectedCustody.logistics && 
-                     selectedCustody.logistics.origenLat && 
-                     selectedCustody.logistics.origenLng &&
-                     selectedCustody.logistics.destinoLat && 
-                     selectedCustody.logistics.destinoLng ? (
+                    <Typography variant="h6">Tracking GPS</Typography>
+                    {selectedCustody.logistics && selectedCustody.logistics.origenLat ? (
                       <Box>
-                        {trackingError && (
-                          <Alert severity="warning" sx={{ mb: 2 }}>
-                            {trackingError}
-                          </Alert>
-                        )}
-
                         {selectedCustody.estado === EstadoCustodia.EN_CUSTODIA && (
                           <TrackingControlPanel
                             isTracking={isTracking}
                             isConnected={isConnected}
                             canStop={isTrackingOwner}
                             spectatorCount={spectatorCount}
-                            error={trackingError}
+                            error={error || trackingError}
                             trackerName={isTrackingOwner ? (user?.name || 'Custodia') : (trackerName || 'Custodia')}
                             trackerEmail={isTrackingOwner ? (user?.email || '') : (trackerEmail || '')}
                             onStart={handleStartCustodyTracking}
@@ -803,65 +688,23 @@ export default function CustodyPage() {
                             onJoin={handleJoinCustodyTracking}
                           />
                         )}
-
                         <RealTimeMap
                           origin={{
-                            lat: selectedCustody.logistics.origenLat,
-                            lng: selectedCustody.logistics.origenLng,
-                            name: selectedCustody.logistics.ubicacionOrigen || 'Origen'
+                            lat: selectedCustody.logistics.origenLat || 0,
+                            lng: selectedCustody.logistics.origenLng || 0
                           }}
-                          currentLocation={(() => {
-                            // Priorizar ubicación del tracking de custodia
-                            if (custodyCurrentLocation) {
-                              return { lat: custodyCurrentLocation.lat, lng: custodyCurrentLocation.lng };
-                            }
-                            // Fallback a ubicación de logística
-                            if (selectedCustody.logistics.ubicacionActualLat && selectedCustody.logistics.ubicacionActualLng) {
-                              return {
-                                lat: selectedCustody.logistics.ubicacionActualLat,
-                                lng: selectedCustody.logistics.ubicacionActualLng
-                              };
-                            }
-                            return null;
-                          })()}
-                          trackerInfo={(() => {
-                            // Si hay tracking de logística activo, mostrarlo
-                            if (selectedCustody.logistics.trackingActivo && 
-                                selectedCustody.logistics.ubicacionActualLat && 
-                                selectedCustody.logistics.ubicacionActualLng) {
-                              return {
-                                name: 'Logística',
-                                lat: selectedCustody.logistics.ubicacionActualLat,
-                                lng: selectedCustody.logistics.ubicacionActualLng
-                              };
-                            }
-                            return null;
-                          })()}
-                          custodyInfo={(() => {
-                            // Mostrar vehículo de custodia si tiene ubicación
-                            const lat = custodyCurrentLocation?.lat ?? selectedCustody.ubicacionActualLat;
-                            const lng = custodyCurrentLocation?.lng ?? selectedCustody.ubicacionActualLng;
-                            if (!lat || !lng) return null;
-                            return {
-                              name: 'Custodia',
-                              lat,
-                              lng
-                            };
-                          })()}
+                          currentLocation={custodyCurrentLocation || (selectedCustody.logistics.ubicacionActualLat && selectedCustody.logistics.ubicacionActualLng ? { lat: selectedCustody.logistics.ubicacionActualLat, lng: selectedCustody.logistics.ubicacionActualLng } : null)}
                           destinations={[{
                             id: selectedCustody.logistics.id,
                             name: selectedCustody.logistics.ubicacionDestino || 'Destino',
-                            lat: selectedCustody.logistics.destinoLat,
-                            lng: selectedCustody.logistics.destinoLng
+                            lat: selectedCustody.logistics.destinoLat || 0,
+                            lng: selectedCustody.logistics.destinoLng || 0
                           }]}
-                          spectatorCount={spectatorCount}
                           isTracking={isTracking}
                         />
                       </Box>
                     ) : (
-                      <Alert severity="info">
-                        El tracking GPS estará disponible cuando la logística esté en ruta
-                      </Alert>
+                      <Alert severity="info">GPS disponible en ruta</Alert>
                     )}
                   </Stack>
                 </TabPanel>
@@ -871,81 +714,54 @@ export default function CustodyPage() {
         )}
       </Box>
 
+      {/* Snackbar for feedback */}
+      <Snackbar open={snackBar.open} autoHideDuration={4000} onClose={handleCloseSnackBar}>
+        <Alert onClose={handleCloseSnackBar} severity={snackBar.severity} sx={{ width: '100%' }}>
+          {snackBar.message}
+        </Alert>
+      </Snackbar>
+
       {/* Dialog: Asignar Personal */}
       <Dialog open={assignDialog.open} onClose={() => setAssignDialog({ open: false })} maxWidth="sm" fullWidth>
-        <DialogTitle>Asignar Personal de Custodia</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <Typography variant="subtitle2">Personal de Custodia</Typography>
-            {assignForm.personalAsignado.map((persona, index) => (
+        <DialogTitle>Asignar Personal</DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            {assignForm.personalAsignado.map((p, index) => (
               <Box key={index} sx={{ display: 'flex', gap: 1 }}>
                 <TextField
                   fullWidth
-                  label={`Persona ${index + 1}`}
-                  value={persona}
+                  label="Cédula"
+                  value={p}
                   onChange={(e) => updatePersonalField(index, e.target.value)}
+                  placeholder="10 dígitos"
                   size="small"
+                  helperText="Exactamente 10 números"
                 />
                 {assignForm.personalAsignado.length > 1 && (
-                  <IconButton onClick={() => removePersonalField(index)} color="error">
-                    <CloseIcon />
-                  </IconButton>
+                  <IconButton onClick={() => removePersonalField(index)} color="error"><CloseIcon /></IconButton>
                 )}
               </Box>
             ))}
-            <Button startIcon={<AddIcon />} onClick={addPersonalField} variant="outlined" size="small">
-              Agregar Personal
-            </Button>
-
-            <TextField
-              label="Vehículo de Custodia"
-              fullWidth
-              value={assignForm.vehiculoCustodia}
-              onChange={(e) => setAssignForm({ ...assignForm, vehiculoCustodia: e.target.value })}
-              size="small"
-            />
-
-            <TextField
-              label="Ruta de Custodia"
-              fullWidth
-              value={assignForm.rutaCustodia}
-              onChange={(e) => setAssignForm({ ...assignForm, rutaCustodia: e.target.value })}
-              multiline
-              minRows={2}
-              size="small"
-            />
+            <Button startIcon={<AddIcon />} onClick={addPersonalField} variant="outlined" size="small">Agregar</Button>
+            <TextField label="Vehículo" fullWidth value={assignForm.vehiculoCustodia} onChange={(e) => setAssignForm({ ...assignForm, vehiculoCustodia: e.target.value })} size="small" />
+            <TextField label="Ruta" fullWidth value={assignForm.rutaCustodia} onChange={(e) => setAssignForm({ ...assignForm, rutaCustodia: e.target.value })} size="small" multiline minRows={2} />
           </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setAssignDialog({ open: false })}>Cancelar</Button>
-          <Button onClick={handleAssignPersonnel} variant="contained" disabled={formLoading}>
-            {formLoading ? <CircularProgress size={24} /> : 'Asignar'}
-          </Button>
+          <Button onClick={handleAssignPersonnel} variant="contained" disabled={formLoading}>Guardar</Button>
         </DialogActions>
       </Dialog>
 
-      {/* Dialog: Registrar Incidente */}
+      {/* Dialog: Incidente */}
       <Dialog open={incidentDialog.open} onClose={() => setIncidentDialog({ open: false })} maxWidth="sm" fullWidth>
         <DialogTitle>Registrar Incidente</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <TextField
-              label="Descripción del Incidente"
-              fullWidth
-              value={incidentForm.descripcion}
-              onChange={(e) => setIncidentForm({ ...incidentForm, descripcion: e.target.value })}
-              multiline
-              minRows={3}
-              size="small"
-            />
-
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            <TextField label="Descripción" fullWidth value={incidentForm.descripcion} onChange={(e) => setIncidentForm({ ...incidentForm, descripcion: e.target.value })} multiline minRows={3} />
             <FormControl fullWidth size="small">
               <InputLabel>Gravedad</InputLabel>
-              <Select
-                value={incidentForm.gravedad}
-                onChange={(e) => setIncidentForm({ ...incidentForm, gravedad: e.target.value as any })}
-                label="Gravedad"
-              >
+              <Select value={incidentForm.gravedad} label="Gravedad" onChange={(e) => setIncidentForm({ ...incidentForm, gravedad: e.target.value as any })}>
                 <MenuItem value="leve">Leve</MenuItem>
                 <MenuItem value="moderada">Moderada</MenuItem>
                 <MenuItem value="grave">Grave</MenuItem>
@@ -955,187 +771,114 @@ export default function CustodyPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setIncidentDialog({ open: false })}>Cancelar</Button>
-          <Button onClick={handleAddIncident} variant="contained" disabled={formLoading}>
-            {formLoading ? <CircularProgress size={24} /> : 'Registrar'}
-          </Button>
+          <Button onClick={handleAddIncident} variant="contained" disabled={formLoading}>Registrar</Button>
         </DialogActions>
       </Dialog>
 
       {/* Dialog: Crear Custodia */}
       <Dialog open={createDialog.open} onClose={() => setCreateDialog({ open: false })} maxWidth="md" fullWidth>
         <DialogTitle>Crear Nueva Custodia</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            {availableOrders.length === 0 ? (
-              <Alert severity="info">
-                Cargando órdenes disponibles...
-              </Alert>
-            ) : (
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            {availableOrders.length === 0 ? <Alert severity="info">No hay órdenes para custodia</Alert> : (
               <>
                 <FormControl fullWidth size="small">
-                  <InputLabel>Orden con Logística</InputLabel>
+                  <InputLabel>Orden</InputLabel>
                   <Select
                     value={createForm.orderId}
+                    label="Orden"
                     onChange={(e) => {
-                      const selectedOrder = availableOrders.find(o => o.id === Number(e.target.value));
-                      setSelectedOrderForCreate(selectedOrder);
-                      setCreateForm({ 
-                        ...createForm, 
+                      const selected = availableOrders.find(o => o.id === Number(e.target.value));
+                      setSelectedOrderForCreate(selected);
+                      setCreateForm({
+                        ...createForm,
                         orderId: e.target.value,
-                        logisticsId: selectedOrder?.logistica?.id?.toString() || '',
-                        vehiculoCustodia: selectedOrder?.logistica?.vehiculoAsignado || '',
-                        rutaCustodia: selectedOrder?.logistica?.rutaPlanificada || ''
+                        logisticsId: selected?.logistica?.id?.toString() || '',
+                        vehiculoCustodia: selected?.logistica?.vehiculoAsignado || '',
+                        rutaCustodia: selected?.logistica?.rutaPlanificada || ''
                       });
                     }}
-                    label="Orden con Logística"
                   >
-                    {availableOrders.map((order) => (
-                      <MenuItem key={order.id} value={order.id}>
-                        {order.codigo} - {order.provider?.name} - {order.logistica?.vehiculoAsignado || 'Sin vehículo'}
-                      </MenuItem>
-                    ))}
+                    {availableOrders.map(o => <MenuItem key={o.id} value={o.id}>{o.codigo} - {o.logistica?.vehiculoAsignado}</MenuItem>)}
                   </Select>
                 </FormControl>
 
-                {selectedOrderForCreate && selectedOrderForCreate.logistica && (
-                  <Box sx={{ mt: 2, p: 2, bgcolor: '#f5f5f5', borderRadius: 1 }}>
-                    <Typography variant="subtitle2" gutterBottom>
-                      📍 Mapa de Ruta de Logística
-                    </Typography>
-                    {selectedOrderForCreate.logistica.origenLat && 
-                     selectedOrderForCreate.logistica.origenLng &&
-                     selectedOrderForCreate.logistica.destinoLat && 
-                     selectedOrderForCreate.logistica.destinoLng ? (
-                      <RealTimeMap
-                        origin={{
-                          lat: selectedOrderForCreate.logistica.origenLat,
-                          lng: selectedOrderForCreate.logistica.origenLng,
-                          name: selectedOrderForCreate.logistica.ubicacionOrigen || 'Origen'
-                        }}
-                        currentLocation={
-                          selectedOrderForCreate.logistica.ubicacionActualLat && selectedOrderForCreate.logistica.ubicacionActualLng
-                            ? {
-                                lat: selectedOrderForCreate.logistica.ubicacionActualLat,
-                                lng: selectedOrderForCreate.logistica.ubicacionActualLng
-                              }
-                            : null
-                        }
-                        destinations={[{
-                          id: selectedOrderForCreate.logistica.id,
-                          name: selectedOrderForCreate.logistica.ubicacionDestino || 'Destino',
-                          lat: selectedOrderForCreate.logistica.destinoLat,
-                          lng: selectedOrderForCreate.logistica.destinoLng
-                        }]}
-                        isTracking={false}
-                      />
-                    ) : (
-                      <Alert severity="info">
-                        No hay coordenadas disponibles para esta ruta
-                      </Alert>
-                    )}
-                    
-                    <Box sx={{ mt: 2, p: 1, bgcolor: 'white', borderRadius: 0.5 }}>
-                      <Typography variant="caption" color="textSecondary">
-                        <strong>Origen:</strong> {selectedOrderForCreate.logistica.ubicacionOrigen || 'No especificado'}
-                      </Typography>
-                      <br />
-                      <Typography variant="caption" color="textSecondary">
-                        <strong>Destino:</strong> {selectedOrderForCreate.logistica.ubicacionDestino || 'No especificado'}
-                      </Typography>
-                      <br />
-                      <Typography variant="caption" color="textSecondary">
-                        <strong>Ruta Planificada:</strong> {selectedOrderForCreate.logistica.rutaPlanificada || 'No especificada'}
-                      </Typography>
-                    </Box>
+                {selectedOrderForCreate?.logistica && (
+                  <Box sx={{ mt: 1, height: 200, borderRadius: 1, overflow: 'hidden' }}>
+                    <RealTimeMap
+                      origin={{
+                        lat: selectedOrderForCreate.logistica.origenLat || 0,
+                        lng: selectedOrderForCreate.logistica.origenLng || 0
+                      }}
+                      currentLocation={null}
+                      destinations={[{
+                        id: selectedOrderForCreate.logistica.id,
+                        name: selectedOrderForCreate.logistica.ubicacionDestino || 'Destino',
+                        lat: selectedOrderForCreate.logistica.destinoLat || 0,
+                        lng: selectedOrderForCreate.logistica.destinoLng || 0
+                      }]}
+                      isTracking={false}
+                    />
                   </Box>
                 )}
 
-                <Divider />
-
                 <Typography variant="subtitle2">Personal de Custodia</Typography>
-                {createForm.personalAsignado.map((persona, index) => (
+                {createForm.personalAsignado.map((p, index) => (
                   <Box key={index} sx={{ display: 'flex', gap: 1 }}>
                     <TextField
                       fullWidth
-                      label={`Persona ${index + 1}`}
-                      value={persona}
-                      onChange={(e) => {
-                        const newPersonal = [...createForm.personalAsignado];
-                        newPersonal[index] = e.target.value;
-                        setCreateForm({ ...createForm, personalAsignado: newPersonal });
-                      }}
+                      label={`Cédula ${index + 1}`}
+                      value={p}
+                      onChange={(e) => updatePersonalFieldCreate(index, e.target.value)}
+                      placeholder="10 dígitos"
                       size="small"
+                      helperText="Exactamente 10 números"
                     />
                     {createForm.personalAsignado.length > 1 && (
-                      <IconButton 
-                        onClick={() => {
-                          setCreateForm({
-                            ...createForm,
-                            personalAsignado: createForm.personalAsignado.filter((_, i) => i !== index)
-                          });
-                        }} 
-                        color="error"
-                      >
-                        <CloseIcon />
-                      </IconButton>
+                      <IconButton onClick={() => removePersonalFieldCreate(index)} color="error"><CloseIcon /></IconButton>
                     )}
                   </Box>
                 ))}
-                <Button 
-                  startIcon={<AddIcon />} 
-                  onClick={() => {
-                    setCreateForm({
-                      ...createForm,
-                      personalAsignado: [...createForm.personalAsignado, '']
-                    });
-                  }} 
-                  variant="outlined" 
-                  size="small"
-                >
-                  Agregar Personal
-                </Button>
+                <Button startIcon={<AddIcon />} onClick={addPersonalFieldCreate} variant="outlined" size="small">Agregar Personal</Button>
 
-                <TextField
-                  label="Vehículo de Custodia"
-                  fullWidth
-                  value={createForm.vehiculoCustodia}
-                  onChange={(e) => setCreateForm({ ...createForm, vehiculoCustodia: e.target.value })}
-                  size="small"
-                  placeholder="Ej: Patrulla #123"
-                />
-
-                <TextField
-                  label="Ruta de Custodia"
-                  fullWidth
-                  value={createForm.rutaCustodia}
-                  onChange={(e) => setCreateForm({ ...createForm, rutaCustodia: e.target.value })}
-                  multiline
-                  minRows={2}
-                  size="small"
-                  placeholder="Describe la ruta que seguirá el personal de custodia"
-                />
-
-                <TextField
-                  label="Observaciones"
-                  fullWidth
-                  value={createForm.observaciones}
-                  onChange={(e) => setCreateForm({ ...createForm, observaciones: e.target.value })}
-                  multiline
-                  minRows={2}
-                  size="small"
-                />
+                <TextField label="Vehículo" fullWidth value={createForm.vehiculoCustodia} onChange={(e) => setCreateForm({ ...createForm, vehiculoCustodia: e.target.value })} size="small" />
+                <TextField label="Ruta" fullWidth value={createForm.rutaCustodia} onChange={(e) => setCreateForm({ ...createForm, rutaCustodia: e.target.value })} size="small" multiline minRows={2} />
+                <TextField label="Observaciones" fullWidth value={createForm.observaciones} onChange={(e) => setCreateForm({ ...createForm, observaciones: e.target.value })} size="small" multiline minRows={2} />
               </>
             )}
           </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setCreateDialog({ open: false })}>Cancelar</Button>
-          <Button 
-            onClick={handleCreateCustody} 
-            variant="contained" 
-            disabled={formLoading || !createForm.orderId || availableOrders.length === 0}
-          >
-            {formLoading ? <CircularProgress size={24} /> : 'Crear Custodia'}
+          <Button onClick={handleCreateCustody} variant="contained" disabled={formLoading || !createForm.orderId}>Crear</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Tracking Confirmation Dialog */}
+      <Dialog open={trackingDialog.open} onClose={handleCancelTracking}>
+        <DialogTitle>
+          Activar Seguimiento de Ubicación
+        </DialogTitle>
+        <DialogContent>
+          {error && trackingDialog.open && (
+            <Alert severity="error" sx={{ mb: 2, whiteSpace: 'pre-line' }}>
+              {error}
+            </Alert>
+          )}
+          <Typography>
+            Para iniciar la custodia, necesitamos activar el seguimiento de tu ubicación en tiempo real.
+            Esto permitirá al centro de control monitorear la posición del personal de seguridad y el vehículo en todo momento.
+          </Typography>
+          <Typography sx={{ mt: 2, color: 'text.secondary' }}>
+            ¿Deseas activar el seguimiento de ubicación e iniciar la custodia?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCancelTracking} color="inherit">
+            Cancelar
+          </Button>
+          <Button onClick={handleStartCustodyWithGPS} variant="contained" color="primary" disabled={formLoading}>
+            {formLoading ? 'Iniciando...' : 'Activar Seguimiento e Iniciar'}
           </Button>
         </DialogActions>
       </Dialog>

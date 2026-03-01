@@ -2,7 +2,7 @@
 export interface Reception {
   id: number;
   orderId: number;
-  fechaLlegada: Date;
+  fechaLlegada: string;
   horaLlegada: string;
   pesoRecibido?: number;
   calidadValidada: boolean;
@@ -22,13 +22,15 @@ export interface Reception {
       location: string;
     };
     cantidadEstimada: number;
-    precioEstimadoCompra: number;
+    precioEstimadoCompra?: number;
+    precioEstimadoVenta?: number;
     fechaCreacion: Date;
   };
 }
 
 export interface CreateReceptionData {
   orderId: number;
+  packagerId?: number;
   fechaLlegada: string;
   horaLlegada: string;
   pesoRecibido?: number;
@@ -81,10 +83,22 @@ export interface OrderForSelection {
     name: string;
     location: string;
   };
+  packager?: {
+    id: number;
+    name: string;
+  } | null;
   cantidadEstimada: number;
   precioEstimadoCompra: number;
   fechaCreacion: Date;
   estado: string;
+  logistica?: {
+    fechaFinalizacion?: string | Date | null;
+  };
+}
+
+export interface PackagerForSelection {
+  id: number;
+  name: string;
 }
 
 // Classification options based on common industry standards

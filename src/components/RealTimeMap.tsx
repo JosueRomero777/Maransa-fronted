@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import L, { Map as LeafletMap } from 'leaflet';
 
 interface RealTimeMapProps {
@@ -49,6 +49,7 @@ export const RealTimeMap: React.FC<RealTimeMapProps> = ({
   const originMarkerRef = useRef<L.Marker | null>(null);
   const destinationMarkersRef = useRef<Map<number, L.Marker>>(new Map());
   const polylineRef = useRef<L.Polyline | null>(null);
+  const [routeCoordinates, setRouteCoordinates] = useState<[number, number][]>([]);
 
   // Inicializar mapa
   useEffect(() => {
@@ -186,45 +187,75 @@ export const RealTimeMap: React.FC<RealTimeMapProps> = ({
     }
   }, [custodyInfo]);
 
-  // Dibujar ruta planificada
+  // Obtener ruta real desde OSRM
+  useEffect(() => {
+    const fetchRoute = async () => {
+      if (!origin && destinations.length === 0) return;
+
+      const waypoints: string[] = [];
+
+      if (origin) {
+        waypoints.push(`${origin.lng},${origin.lat}`);
+      }
+
+      const currentLat = trackerInfo?.lat || currentLocation?.lat;
+      const currentLng = trackerInfo?.lng || currentLocation?.lng;
+
+      if (currentLat && currentLng) {
+        waypoints.push(`${currentLng},${currentLat}`);
+      }
+
+      destinations.forEach(d => {
+        waypoints.push(`${d.lng},${d.lat}`);
+      });
+
+      if (waypoints.length < 2) {
+        setRouteCoordinates([]);
+        return;
+      }
+
+      try {
+        const url = `https://router.project-osrm.org/route/v1/driving/${waypoints.join(';')}?overview=full&geometries=geojson`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.routes && data.routes.length > 0) {
+          const coords = data.routes[0].geometry.coordinates.map(
+            (coord: [number, number]) => [coord[1], coord[0]] as [number, number]
+          );
+          setRouteCoordinates(coords);
+        }
+      } catch (err) {
+        console.error('Error obteniendo ruta OSRM:', err);
+        // Fallback: usar waypoints directos (líneas rectas)
+        const fallbackCoords: [number, number][] = [];
+        if (origin) fallbackCoords.push([origin.lat, origin.lng]);
+        if (currentLat && currentLng) fallbackCoords.push([currentLat, currentLng]);
+        destinations.forEach(d => fallbackCoords.push([d.lat, d.lng]));
+        setRouteCoordinates(fallbackCoords);
+      }
+    };
+
+    fetchRoute();
+  }, [origin, trackerInfo, currentLocation, destinations]);
+
+  // Dibujar ruta
   useEffect(() => {
     if (!mapRef.current) return;
 
-    // Construir waypoints: origen → posición actual → destinos
-    const waypoints: [number, number][] = [];
-
-    // Agregar origen
-    if (origin) {
-      waypoints.push([origin.lat, origin.lng]);
-    }
-
-    // Agregar posición actual del tracker (si existe)
-    if (trackerInfo) {
-      waypoints.push([trackerInfo.lat, trackerInfo.lng]);
-    } else if (currentLocation) {
-      waypoints.push([currentLocation.lat, currentLocation.lng]);
-    }
-
-    // Agregar destinos
-    destinations.forEach(d => {
-      waypoints.push([d.lat, d.lng]);
-    });
-
-    // Solo dibujar si hay al menos 2 puntos
-    if (waypoints.length >= 2) {
+    if (routeCoordinates.length >= 2) {
       if (polylineRef.current) {
         mapRef.current.removeLayer(polylineRef.current);
       }
 
-      polylineRef.current = L.polyline(waypoints, {
+      polylineRef.current = L.polyline(routeCoordinates, {
         color: '#1976d2',
-        weight: 3,
+        weight: 4,
         opacity: 0.7,
-        dashArray: isTracking ? undefined : '5, 10' // Línea punteada si no está tracking activo
+        dashArray: isTracking ? undefined : '5, 10'
       }).addTo(mapRef.current);
     }
-
-  }, [origin, trackerInfo, currentLocation, destinations, isTracking]);
+  }, [routeCoordinates, isTracking]);
 
   return (
     <div

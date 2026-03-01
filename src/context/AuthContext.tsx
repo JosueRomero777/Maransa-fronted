@@ -15,6 +15,8 @@ export interface AuthContextType {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (userData: RegisterData) => Promise<RegisterResponse>;
+  updateProfile: (profileData: { name: string; email: string }) => Promise<void>;
+  changePassword: (passwordData: { currentPassword: string; newPassword: string }) => Promise<void>;
   logout: () => void;
 }
 
@@ -162,6 +164,73 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }, []);
 
+  const updateProfile = useCallback(async (profileData: { name: string; email: string }): Promise<void> => {
+    if (!token) {
+      throw new Error('No autenticado');
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(profileData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Error actualizando perfil');
+      }
+
+      const updatedUser = await response.json();
+      const nextUser: User = {
+        id: updatedUser.id,
+        email: updatedUser.email,
+        name: updatedUser.name,
+        role: updatedUser.role,
+      };
+
+      setUser(nextUser);
+      localStorage.setItem('user', JSON.stringify(nextUser));
+    } catch (error) {
+      console.error('Update profile error:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [token]);
+
+  const changePassword = useCallback(async (passwordData: { currentPassword: string; newPassword: string }): Promise<void> => {
+    if (!token) {
+      throw new Error('No autenticado');
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/change-password`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(passwordData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Error cambiando contraseña');
+      }
+    } catch (error) {
+      console.error('Change password error:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [token]);
+
   const logout = useCallback(() => {
     setToken(null);
     setUser(null);
@@ -176,8 +245,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isLoading,
     login,
     register,
+    updateProfile,
+    changePassword,
     logout,
-  }), [user, token, isAuthenticated, isLoading, login, register, logout]);
+  }), [user, token, isAuthenticated, isLoading, login, register, updateProfile, changePassword, logout]);
 
   return (
     <AuthContext.Provider value={contextValue}>

@@ -19,14 +19,7 @@ import {
   TableRow,
   Alert,
   CircularProgress,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
+  Tooltip,
   Divider,
   Accordion,
   AccordionSummary,
@@ -40,7 +33,6 @@ import {
 import {
   ArrowBack as ArrowBackIcon,
   Edit as EditIcon,
-  ChangeCircle as ChangeStatusIcon,
   ExpandMore as ExpandMoreIcon,
   Business as BusinessIcon,
   Schedule as ScheduleIcon,
@@ -90,6 +82,8 @@ interface OrderDetail {
     id: number;
     name: string;
     contact_whatsapp: string;
+    contact_phone?: string;
+    contact_email?: string;
   };
   createdBy: {
     id: number;
@@ -112,6 +106,7 @@ interface OrderDetail {
     };
   };
   custodia?: {
+    estado?: string;
     horarioPesca?: string;
     horarioEstimadoLlegada?: string;
     assignedUser?: {
@@ -143,9 +138,6 @@ const OrderDetail: React.FC = () => {
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [statusDialog, setStatusDialog] = useState(false);
-  const [newStatus, setNewStatus] = useState('');
-  const [statusLoading, setStatusLoading] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -173,35 +165,6 @@ const OrderDetail: React.FC = () => {
       setError(err instanceof Error ? err.message : 'Error desconocido');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleStatusChange = async () => {
-    if (!newStatus || !order) return;
-
-    try {
-      setStatusLoading(true);
-      const response = await fetch(`${API_BASE_URL}/orders/${order.id}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({ estado: newStatus }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Error al cambiar estado');
-      }
-
-      await loadOrderDetail();
-      setStatusDialog(false);
-      setNewStatus('');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al cambiar estado');
-    } finally {
-      setStatusLoading(false);
     }
   };
 
@@ -253,15 +216,54 @@ const OrderDetail: React.FC = () => {
     return dateString ? new Date(dateString).toLocaleDateString() : 'N/A';
   };
 
-  const canEditOrder = () => {
-    if (!order || (user?.role !== 'ADMIN' && user?.role !== 'COMPRAS')) return false;
-    return !['FINALIZADO', 'FACTURADO', 'DESCARTADO'].includes(order.estado);
+  const getCustodyStatusColor = (status?: string): 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' => {
+    if (!status) return 'default';
+    if (status === 'COMPLETADO') return 'success';
+    if (status === 'EN_CUSTODIA') return 'primary';
+    if (status === 'ASIGNADO') return 'info';
+    return 'warning';
   };
 
-  const canChangeStatus = () => {
-    if (!order) return false;
-    const allowedRoles = ['ADMIN', 'COMPRAS', 'LABORATORIO', 'LOGISTICA', 'CUSTODIA', 'EMPACADORA'];
-    return allowedRoles.includes(user?.role || '') && !['FINALIZADO', 'DESCARTADO'].includes(order.estado);
+  const hasEditPermission = user?.role === 'ADMIN' || user?.role === 'COMPRAS';
+
+  const getEditDisabledReason = () => {
+    if (!order) return null;
+    const editableStatuses = new Set([
+      'CREADO',
+      'EN_ANALISIS',
+      'APROBADO',
+      'RECHAZADO',
+      'EN_REEVALUACION',
+      'LABORATORIO_APROBADO',
+      'LABORATORIO_RECHAZADO',
+      'LABORATORIO_REEVALUACION',
+      'DEFINIENDO_COSECHA',
+      'COSECHA_DEFINIDA',
+      'COSECHA_RECHAZADA',
+    ]);
+
+    if (editableStatuses.has(order.estado)) {
+      return null;
+    }
+
+    const statusReasons: Record<string, string> = {
+      COSECHA_APROBADA: 'No se puede editar porque la cosecha ya fue aprobada',
+      LOGISTICA_ASIGNADA: 'No se puede editar porque el pedido ya pasó a logística',
+      EN_TRANSPORTE: 'No se puede editar porque el pedido está en transporte',
+      CUSTODIA_ASIGNADA: 'No se puede editar porque el pedido ya tiene custodia asignada',
+      EN_CUSTODIA: 'No se puede editar porque el pedido está en custodia',
+      CUSTODIA_COMPLETADA: 'No se puede editar porque la custodia ya fue completada',
+      ENTREGADO: 'No se puede editar porque el pedido ya fue entregado',
+      EN_COSECHA: 'No se puede editar porque el pedido ya está en cosecha',
+      EN_TRANSITO: 'No se puede editar porque el pedido está en tránsito',
+      RECIBIDO: 'No se puede editar porque el pedido ya fue recibido',
+      FACTURADO: 'No se puede editar porque el pedido ya fue facturado',
+      FINALIZADO: 'No se puede editar porque el pedido está finalizado',
+      CANCELADO: 'No se puede editar porque el pedido está cancelado',
+      DESCARTADO: 'No se puede editar porque el pedido está descartado',
+    };
+
+    return statusReasons[order.estado] || 'No se puede editar en el estado actual del pedido';
   };
 
   if (loading) {
@@ -322,24 +324,19 @@ const OrderDetail: React.FC = () => {
         </Grid>
         
         <Grid item sx={{ display: 'flex', gap: 2 }}>
-          {canChangeStatus() && (
-            <Button
-              variant="outlined"
-              startIcon={<ChangeStatusIcon />}
-              onClick={() => setStatusDialog(true)}
-            >
-              Cambiar Estado
-            </Button>
-          )}
-          
-          {canEditOrder() && (
-            <Button
-              variant="contained"
-              startIcon={<EditIcon />}
-              onClick={() => navigate(`/orders/${order.id}/edit`)}
-            >
-              Editar
-            </Button>
+          {hasEditPermission && (
+            <Tooltip title={getEditDisabledReason() || 'Editar'}>
+              <span>
+                <Button
+                  variant="contained"
+                  startIcon={<EditIcon />}
+                  onClick={() => navigate(`/orders/${order.id}/edit`)}
+                  disabled={Boolean(getEditDisabledReason())}
+                >
+                  Editar
+                </Button>
+              </span>
+            </Tooltip>
           )}
         </Grid>
       </Grid>
@@ -491,6 +488,61 @@ const OrderDetail: React.FC = () => {
                   </Grid>
                 )}
               </Grid>
+            </CardContent>
+          </Card>
+
+          {/* Información de la Empacadora */}
+          <Card sx={{ mb: 3 }}>
+            <CardHeader
+              title="Información de la Empacadora"
+              avatar={<BusinessIcon />}
+            />
+            <CardContent>
+              {order.packager ? (
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      Nombre
+                    </Typography>
+                    <Typography variant="body1" fontWeight="medium">
+                      {order.packager.name}
+                    </Typography>
+                  </Grid>
+
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="body2" color="text.secondary">
+                      WhatsApp
+                    </Typography>
+                    <Typography variant="body1" fontWeight="medium">
+                      {order.packager.contact_whatsapp || 'No registrado'}
+                    </Typography>
+                  </Grid>
+
+                  {order.packager.contact_phone && (
+                    <Grid item xs={12} md={6}>
+                      <Typography variant="body2" color="text.secondary">
+                        Teléfono
+                      </Typography>
+                      <Typography variant="body1" fontWeight="medium">
+                        {order.packager.contact_phone}
+                      </Typography>
+                    </Grid>
+                  )}
+
+                  {order.packager.contact_email && (
+                    <Grid item xs={12} md={6}>
+                      <Typography variant="body2" color="text.secondary">
+                        Email
+                      </Typography>
+                      <Typography variant="body1" fontWeight="medium">
+                        {order.packager.contact_email}
+                      </Typography>
+                    </Grid>
+                  )}
+                </Grid>
+              ) : (
+                <Typography color="text.secondary">No tiene empacadora asignada</Typography>
+              )}
             </CardContent>
           </Card>
 
@@ -647,7 +699,16 @@ const OrderDetail: React.FC = () => {
               {/* Custodia */}
               <Accordion>
                 <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                  <Typography>Custodia</Typography>
+                  <Grid item sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                    <Typography sx={{ flexGrow: 1 }}>Custodia</Typography>
+                    {order.custodia && (
+                      <Chip
+                        size="small"
+                        label={order.custodia.estado || 'EN_CUSTODIA'}
+                        color={getCustodyStatusColor(order.custodia.estado)}
+                      />
+                    )}
+                  </Grid>
                 </AccordionSummary>
                 <AccordionDetails>
                   {order.custodia ? (
@@ -680,7 +741,16 @@ const OrderDetail: React.FC = () => {
               {/* Recepción */}
               <Accordion>
                 <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                  <Typography>Recepción</Typography>
+                  <Grid item sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                    <Typography sx={{ flexGrow: 1 }}>Recepción</Typography>
+                    {order.recepcion && (
+                      <Chip
+                        size="small"
+                        label="COMPLETADO"
+                        color="success"
+                      />
+                    )}
+                  </Grid>
                 </AccordionSummary>
                 <AccordionDetails>
                   {order.recepcion ? (
@@ -768,52 +838,6 @@ const OrderDetail: React.FC = () => {
           </Card>
         </Grid>
       </Grid>
-
-      {/* Dialog para cambio de estado */}
-      <Dialog
-        open={statusDialog}
-        onClose={() => setStatusDialog(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Cambiar Estado del Pedido</DialogTitle>
-        <DialogContent>
-          <Grid item sx={{ mt: 2 }}>
-            <FormControl fullWidth>
-              <InputLabel>Nuevo Estado</InputLabel>
-              <Select
-                value={newStatus}
-                label="Nuevo Estado"
-                onChange={(e) => setNewStatus(e.target.value)}
-              >
-                <MenuItem value="CREADO">Creado</MenuItem>
-                <MenuItem value="EN_ANALISIS">En Análisis</MenuItem>
-                <MenuItem value="APROBADO">Aprobado</MenuItem>
-                <MenuItem value="RECHAZADO">Rechazado</MenuItem>
-                <MenuItem value="EN_REEVALUACION">En Reevaluación</MenuItem>
-                <MenuItem value="EN_COSECHA">En Cosecha</MenuItem>
-                <MenuItem value="EN_TRANSITO">En Tránsito</MenuItem>
-                <MenuItem value="EN_CUSTODIA">En Custodia</MenuItem>
-                <MenuItem value="RECIBIDO">Recibido</MenuItem>
-                <MenuItem value="FACTURADO">Facturado</MenuItem>
-                <MenuItem value="FINALIZADO">Finalizado</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setStatusDialog(false)}>
-            Cancelar
-          </Button>
-          <Button
-            onClick={handleStatusChange}
-            variant="contained"
-            disabled={!newStatus || statusLoading}
-          >
-            {statusLoading ? <CircularProgress size={20} /> : 'Cambiar Estado'}
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Grid>
   );
 };

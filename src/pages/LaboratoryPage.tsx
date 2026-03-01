@@ -14,7 +14,6 @@ import {
   DialogTitle,
   Divider,
   FormControl,
-  Grid,
   InputLabel,
   MenuItem,
   Select,
@@ -110,19 +109,39 @@ const LaboratoryPage: React.FC = () => {
     if (previewFile && !previewFile.blob) {
       const loadFile = async () => {
         try {
-          const token = localStorage.getItem('token');
-          const response = await fetch(`${API_BASE_URL}/laboratory/${previewFile.labId}/files/${previewFile.file}`, {
-            headers: {
-              ...(token && { 'Authorization': `Bearer ${token}` }),
-            },
-          });
+          const encodedFilename = encodeURIComponent(previewFile.file);
+          const response = await fetch(`${API_BASE_URL}/laboratory/${previewFile.labId}/files/${encodedFilename}`);
+
           if (response.ok) {
-            const blob = await response.blob();
-            const blobUrl = URL.createObjectURL(blob);
+            const originalBlob = await response.blob();
+
+            // Debug: Check magic bytes (%PDF)
+            const firstBytes = await originalBlob.slice(0, 5).text();
+            console.log('DEBUG: PDF Load', {
+              name: previewFile.file,
+              type: originalBlob.type,
+              size: originalBlob.size,
+              magic: firstBytes
+            });
+
+            // Force correct MIME type based on extension to ensure iframe/img rendering
+            let finalBlob = originalBlob;
+            const filename = previewFile.file.toLowerCase();
+            if (filename.endsWith('.pdf')) {
+              finalBlob = new Blob([originalBlob], { type: 'application/pdf' });
+            } else if (/\.(jpg|jpeg|png|gif|webp)$/i.test(filename)) {
+              const ext = filename.split('.').pop();
+              const type = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
+              finalBlob = new Blob([originalBlob], { type: type });
+            }
+
+            const blobUrl = URL.createObjectURL(finalBlob);
             setPreviewFile({ ...previewFile, blob: blobUrl });
+          } else {
+            console.error('Error al cargar archivo:', response.status);
           }
         } catch (error) {
-          console.error('Error cargando archivo:', error);
+          console.error('Error de red al cargar archivo:', error);
         }
       };
       loadFile();
@@ -293,13 +312,13 @@ const LaboratoryPage: React.FC = () => {
 
   const handleApprove = async () => {
     if (!selectedLab) return
-    
+
     // Validar que tenga archivos adjuntos
     if (!selectedLab.archivosAdjuntos || selectedLab.archivosAdjuntos.length === 0) {
       setError('Debe adjuntar al menos un archivo antes de aprobar el análisis')
       return
     }
-    
+
     setActionLoading(true)
     setError(null)
     try {
@@ -317,13 +336,13 @@ const LaboratoryPage: React.FC = () => {
 
   const handleReject = async () => {
     if (!selectedLab) return
-    
+
     // Validar que tenga archivos adjuntos
     if (!selectedLab.archivosAdjuntos || selectedLab.archivosAdjuntos.length === 0) {
       setError('Debe adjuntar al menos un archivo antes de rechazar el análisis')
       return
     }
-    
+
     setActionLoading(true)
     setError(null)
     try {
@@ -429,7 +448,7 @@ const LaboratoryPage: React.FC = () => {
 
   const handleAddFiles = async () => {
     if (!selectedLab) return
-    
+
     // Combinar archivos capturados con archivos subidos
     const allFiles: File[] = [...capturedFiles]
     if (newFiles) {
@@ -440,7 +459,7 @@ const LaboratoryPage: React.FC = () => {
       setError('Debe seleccionar o capturar al menos un archivo')
       return
     }
-    
+
     setActionLoading(true)
     setError(null)
     try {
@@ -448,7 +467,7 @@ const LaboratoryPage: React.FC = () => {
       const dataTransfer = new DataTransfer()
       allFiles.forEach(file => dataTransfer.items.add(file))
       const fileList = dataTransfer.files
-      
+
       await laboratoryService.addFilesToLaboratory(selectedLab.id, fileList)
       setAddFilesDialog({ open: false })
       setNewFiles(null)
@@ -513,71 +532,79 @@ const LaboratoryPage: React.FC = () => {
       </Card>
 
       {/* Lista de informes */}
-      <Grid container spacing={2}>
-        <Grid item xs={12} md={selectedLab ? 6 : 12}>
+      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+        <Box sx={{ flex: selectedLab ? '0 0 50%' : '0 0 100%' }}>
           {loading ? (
             <Box display="flex" justifyContent="center" py={6}>
               <CircularProgress />
             </Box>
           ) : (
-            <Grid container spacing={2}>
+            <Box sx={{
+              display: 'grid',
+              gridTemplateColumns: {
+                xs: '1fr',
+                sm: selectedLab ? '1fr' : 'repeat(2, 1fr)',
+                lg: selectedLab ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)'
+              },
+              gap: 2
+            }}>
               {items.map((lab) => {
                 const visualEstado: EstadoVisual = lab.order?.estado === 'CANCELADO' ? 'DESCARTADO' : lab.estado
                 return (
-                <Grid item xs={12} sm={selectedLab ? 12 : 6} md={selectedLab ? 12 : 6} lg={selectedLab ? 6 : 4} key={lab.id}>
-                  <Card
-                    onClick={() => setSelectedLab(lab)}
-                    sx={{
-                      cursor: 'pointer',
-                      border: selectedLab?.id === lab.id ? '2px solid' : '1px solid #e0e0e0',
-                      borderColor: selectedLab?.id === lab.id ? 'primary.main' : 'inherit',
-                      backgroundColor: selectedLab?.id === lab.id ? 'action.selected' : 'inherit',
-                      transition: 'all 0.3s ease',
-                      '&:hover': {
-                        boxShadow: 2,
-                      }
-                    }}
-                  >
-                    <CardHeader
-                      title={`Orden ${lab.order?.codigo || lab.orderId}`}
-                      subheader={lab.order?.provider?.name}
-                      action={<Chip label={visualEstado} color={estadoColor(visualEstado) as any} />}
-                    />
-                    <CardContent>
-                      <Stack spacing={1}>
-                        <Typography variant="body2">
-                          <strong>Olor:</strong> {lab.olor || '-'}
-                        </Typography>
-                        <Typography variant="body2">
-                          <strong>Sabor:</strong> {lab.sabor || '-'}
-                        </Typography>
-                        <Typography variant="body2">
-                          <strong>Textura:</strong> {lab.textura || '-'}
-                        </Typography>
-                        <Typography variant="body2">
-                          <strong>Apariencia:</strong> {lab.apariencia || '-'}
-                        </Typography>
-                        <Typography variant="body2">
-                          <strong>Archivos:</strong> {lab.archivosAdjuntos?.length || 0}
-                        </Typography>
-                      </Stack>
-                    </CardContent>
-                  </Card>
-                </Grid>
+                  <Box key={lab.id}>
+                    <Card
+                      onClick={() => setSelectedLab(lab)}
+                      sx={{
+                        cursor: 'pointer',
+                        border: selectedLab?.id === lab.id ? '2px solid' : '1px solid #e0e0e0',
+                        borderColor: selectedLab?.id === lab.id ? 'primary.main' : 'inherit',
+                        backgroundColor: selectedLab?.id === lab.id ? 'action.selected' : 'inherit',
+                        transition: 'all 0.3s ease',
+                        '&:hover': {
+                          boxShadow: 2,
+                        }
+                      }}
+                    >
+                      <CardHeader
+                        title={`Orden ${lab.order?.codigo || lab.orderId}`}
+                        subheader={lab.order?.provider?.name}
+                        action={<Chip label={visualEstado} color={estadoColor(visualEstado) as any} />}
+                      />
+                      <CardContent>
+                        <Stack spacing={1}>
+                          <Typography variant="body2">
+                            <strong>Olor:</strong> {lab.olor || '-'}
+                          </Typography>
+                          <Typography variant="body2">
+                            <strong>Sabor:</strong> {lab.sabor || '-'}
+                          </Typography>
+                          <Typography variant="body2">
+                            <strong>Textura:</strong> {lab.textura || '-'}
+                          </Typography>
+                          <Typography variant="body2">
+                            <strong>Apariencia:</strong> {lab.apariencia || '-'}
+                          </Typography>
+                          <Typography variant="body2">
+                            <strong>Archivos:</strong> {lab.archivosAdjuntos?.length || 0}
+                          </Typography>
+                        </Stack>
+                      </CardContent>
+                    </Card>
+                  </Box>
                 )
               })}
               {!items.length && (
-                <Grid item xs={12}>
+                <Box sx={{ gridColumn: '1 / -1' }}>
                   <Alert severity="info">No hay informes de laboratorio</Alert>
-                </Grid>
+                </Box>
               )}
-            </Grid>
+            </Box>
           )}
-        </Grid>
+        </Box>
 
         {/* Detalle de informe seleccionado */}
         {selectedLab && (
-          <Grid item xs={12} md={6}>
+          <Box sx={{ flex: '0 0 50%' }}>
             <Card sx={{ position: 'sticky', top: 20 }}>
               <CardHeader
                 title={`Detalle - Orden ${selectedLab.order?.codigo}`}
@@ -698,10 +725,10 @@ const LaboratoryPage: React.FC = () => {
                         <List>
                           {selectedLab.archivosAdjuntos.map((file, idx) => {
                             // Extraer solo el nombre del archivo, manejando tanto / como \
-                            const fileName = file.includes('/') 
-                              ? file.split('/').pop() 
-                              : file.includes('\\') 
-                                ? file.split('\\').pop() 
+                            const fileName = file.includes('/')
+                              ? file.split('/').pop()
+                              : file.includes('\\')
+                                ? file.split('\\').pop()
                                 : file;
                             console.log('Archivo original:', file, 'Nombre extraído:', fileName);
                             const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName || '');
@@ -713,8 +740,8 @@ const LaboratoryPage: React.FC = () => {
                                   primaryTypographyProps={{ variant: 'body2' }}
                                 />
                                 <Tooltip title={isImage || isPdf ? "Vista previa" : "Descargar"}>
-                                  <IconButton 
-                                    size="small" 
+                                  <IconButton
+                                    size="small"
                                     color="primary"
                                     onClick={() => {
                                       if (isImage || isPdf) {
@@ -824,22 +851,27 @@ const LaboratoryPage: React.FC = () => {
                 </TabPanel>
               </CardContent>
             </Card>
-          </Grid>
+          </Box>
         )}
-      </Grid>
+      </Box>
 
       {/* Dialog: Crear nuevo informe */}
       <Dialog open={formDialog.open} onClose={() => setFormDialog({ open: false })} maxWidth="md" fullWidth>
         <DialogTitle>Nuevo Informe de Laboratorio</DialogTitle>
         <DialogContent dividers>
           {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
-          <Grid container spacing={2} mt={1}>
-            <Grid item xs={12}>
+          <Box sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
+            gap: 2,
+            mt: 1
+          }}>
+            <Box sx={{ gridColumn: { md: 'span 3' } }}>
               <FormControl fullWidth required>
                 <InputLabel>Orden</InputLabel>
                 <Select
                   label="Orden"
-                  value={reportForm.orderId === '' ? '' : reportForm.orderId}
+                  value={reportForm.orderId === '' ? '' : String(reportForm.orderId)}
                   onChange={(e) =>
                     setReportForm((prev) => ({
                       ...prev,
@@ -855,70 +887,63 @@ const LaboratoryPage: React.FC = () => {
                   ))}
                 </Select>
               </FormControl>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                label="Olor"
-                fullWidth
-                value={reportForm.olor}
-                onChange={(e) => setReportForm((prev) => ({ ...prev, olor: e.target.value }))}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                label="Sabor"
-                fullWidth
-                value={reportForm.sabor}
-                onChange={(e) => setReportForm((prev) => ({ ...prev, sabor: e.target.value }))}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                label="Textura"
-                fullWidth
-                value={reportForm.textura}
-                onChange={(e) => setReportForm((prev) => ({ ...prev, textura: e.target.value }))}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                label="Apariencia"
-                fullWidth
-                value={reportForm.apariencia}
-                onChange={(e) => setReportForm((prev) => ({ ...prev, apariencia: e.target.value }))}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                label="Parámetros Químicos (JSON o texto)"
-                fullWidth
-                multiline
-                minRows={3}
-                value={reportForm.parametrosQuimicos}
-                onChange={(e) => setReportForm((prev) => ({ ...prev, parametrosQuimicos: e.target.value }))}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                label="Resultado General"
-                fullWidth
-                multiline
-                minRows={2}
-                value={reportForm.resultadoGeneral}
-                onChange={(e) => setReportForm((prev) => ({ ...prev, resultadoGeneral: e.target.value }))}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                label="Observaciones Técnicas"
-                fullWidth
-                multiline
-                minRows={3}
-                value={reportForm.observaciones}
-                onChange={(e) => setReportForm((prev) => ({ ...prev, observaciones: e.target.value }))}
-              />
-            </Grid>
-            <Grid item xs={12}>
+            </Box>
+
+            <TextField
+              label="Olor"
+              fullWidth
+              value={reportForm.olor}
+              onChange={(e) => setReportForm((prev) => ({ ...prev, olor: e.target.value }))}
+            />
+            <TextField
+              label="Sabor"
+              fullWidth
+              value={reportForm.sabor}
+              onChange={(e) => setReportForm((prev) => ({ ...prev, sabor: e.target.value }))}
+            />
+            <TextField
+              label="Textura"
+              fullWidth
+              value={reportForm.textura}
+              onChange={(e) => setReportForm((prev) => ({ ...prev, textura: e.target.value }))}
+            />
+            <TextField
+              label="Apariencia"
+              fullWidth
+              value={reportForm.apariencia}
+              onChange={(e) => setReportForm((prev) => ({ ...prev, apariencia: e.target.value }))}
+            />
+
+            <TextField
+              label="Parámetros Químicos (JSON o texto)"
+              fullWidth
+              multiline
+              minRows={3}
+              value={reportForm.parametrosQuimicos}
+              onChange={(e) => setReportForm((prev) => ({ ...prev, parametrosQuimicos: e.target.value }))}
+              sx={{ gridColumn: { md: 'span 2' } }}
+            />
+
+            <TextField
+              label="Resultado General"
+              fullWidth
+              multiline
+              minRows={3}
+              value={reportForm.resultadoGeneral}
+              onChange={(e) => setReportForm((prev) => ({ ...prev, resultadoGeneral: e.target.value }))}
+            />
+
+            <TextField
+              label="Observaciones Técnicas"
+              fullWidth
+              multiline
+              minRows={3}
+              value={reportForm.observaciones}
+              onChange={(e) => setReportForm((prev) => ({ ...prev, observaciones: e.target.value }))}
+              sx={{ gridColumn: { md: 'span 2' } }}
+            />
+
+            <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <Typography variant="subtitle2" sx={{ mb: 1 }}>
                 Adjuntar Archivos (PDFs, imágenes)
               </Typography>
@@ -929,8 +954,8 @@ const LaboratoryPage: React.FC = () => {
                 onChange={(e) => setReportForm((prev) => ({ ...prev, files: e.target.files }))}
                 style={{ width: '100%' }}
               />
-            </Grid>
-          </Grid>
+            </Box>
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setFormDialog({ open: false })} disabled={formLoading}>
@@ -1128,71 +1153,64 @@ const LaboratoryPage: React.FC = () => {
         <DialogTitle>Editar Informe de Laboratorio</DialogTitle>
         <DialogContent dividers>
           {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
-          <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                label="Olor"
-                fullWidth
-                value={editForm.olor}
-                onChange={(e) => setEditForm((prev) => ({ ...prev, olor: e.target.value }))}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                label="Sabor"
-                fullWidth
-                value={editForm.sabor}
-                onChange={(e) => setEditForm((prev) => ({ ...prev, sabor: e.target.value }))}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                label="Textura"
-                fullWidth
-                value={editForm.textura}
-                onChange={(e) => setEditForm((prev) => ({ ...prev, textura: e.target.value }))}
-              />
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                label="Apariencia"
-                fullWidth
-                value={editForm.apariencia}
-                onChange={(e) => setEditForm((prev) => ({ ...prev, apariencia: e.target.value }))}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                label="Parámetros Químicos"
-                fullWidth
-                multiline
-                minRows={3}
-                value={editForm.parametrosQuimicos}
-                onChange={(e) => setEditForm((prev) => ({ ...prev, parametrosQuimicos: e.target.value }))}
-                helperText="Puede usar JSON para datos estructurados"
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                label="Resultado General"
-                fullWidth
-                multiline
-                minRows={2}
-                value={editForm.resultadoGeneral}
-                onChange={(e) => setEditForm((prev) => ({ ...prev, resultadoGeneral: e.target.value }))}
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                label="Observaciones"
-                fullWidth
-                multiline
-                minRows={3}
-                value={editForm.observaciones}
-                onChange={(e) => setEditForm((prev) => ({ ...prev, observaciones: e.target.value }))}
-              />
-            </Grid>
-          </Grid>
+          <Box sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
+            gap: 2,
+            mt: 1
+          }}>
+            <TextField
+              label="Olor"
+              fullWidth
+              value={editForm.olor}
+              onChange={(e) => setEditForm((prev) => ({ ...prev, olor: e.target.value }))}
+            />
+            <TextField
+              label="Sabor"
+              fullWidth
+              value={editForm.sabor}
+              onChange={(e) => setEditForm((prev) => ({ ...prev, sabor: e.target.value }))}
+            />
+            <TextField
+              label="Textura"
+              fullWidth
+              value={editForm.textura}
+              onChange={(e) => setEditForm((prev) => ({ ...prev, textura: e.target.value }))}
+            />
+            <TextField
+              label="Apariencia"
+              fullWidth
+              value={editForm.apariencia}
+              onChange={(e) => setEditForm((prev) => ({ ...prev, apariencia: e.target.value }))}
+            />
+            <TextField
+              label="Parámetros Químicos"
+              fullWidth
+              multiline
+              minRows={3}
+              value={editForm.parametrosQuimicos}
+              onChange={(e) => setEditForm((prev) => ({ ...prev, parametrosQuimicos: e.target.value }))}
+              helperText="Puede usar JSON para datos estructurados"
+              sx={{ gridColumn: { md: 'span 2' } }}
+            />
+            <TextField
+              label="Resultado General"
+              fullWidth
+              multiline
+              minRows={3}
+              value={editForm.resultadoGeneral}
+              onChange={(e) => setEditForm((prev) => ({ ...prev, resultadoGeneral: e.target.value }))}
+            />
+            <TextField
+              label="Observaciones"
+              fullWidth
+              multiline
+              minRows={3}
+              value={editForm.observaciones}
+              onChange={(e) => setEditForm((prev) => ({ ...prev, observaciones: e.target.value }))}
+              sx={{ gridColumn: { md: 'span 3' } }}
+            />
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setEditDialog({ open: false })} disabled={actionLoading}>
@@ -1222,7 +1240,7 @@ const LaboratoryPage: React.FC = () => {
           <Alert severity="info" sx={{ mb: 2 }}>
             Puede agregar archivos adicionales a este informe. Los nuevos archivos se sumarán a los existentes.
           </Alert>
-          
+
           <Stack spacing={2}>
             <Box>
               <Typography variant="subtitle2" sx={{ mb: 1 }}>
@@ -1298,10 +1316,10 @@ const LaboratoryPage: React.FC = () => {
       </Dialog>
 
       {/* Dialog: Preview de archivos */}
-      <Dialog 
-        open={!!previewFile} 
-        onClose={() => setPreviewFile(null)} 
-        maxWidth="lg" 
+      <Dialog
+        open={!!previewFile}
+        onClose={() => setPreviewFile(null)}
+        maxWidth="lg"
         fullWidth
       >
         <DialogTitle>Previsualización: {previewFile?.file}</DialogTitle>
@@ -1320,7 +1338,7 @@ const LaboratoryPage: React.FC = () => {
                 </Box>
               ) : /\.(jpg|jpeg|png|gif|webp)$/i.test(previewFile.file) ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
-                  <img 
+                  <img
                     src={previewFile.blob}
                     alt="Preview"
                     style={{ maxWidth: '100%', maxHeight: 600 }}
@@ -1333,19 +1351,15 @@ const LaboratoryPage: React.FC = () => {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => {
-            if (previewFile?.blob) {
-              URL.revokeObjectURL(previewFile.blob);
-            }
-            setPreviewFile(null);
-          }}>Cerrar</Button>
+          <Button onClick={() => setPreviewFile(null)}>Cerrar</Button>
           {previewFile?.blob && (
-            <Button 
-              variant="contained" 
+            <Button
+              variant="contained"
               onClick={() => {
                 const a = document.createElement('a');
                 a.href = previewFile.blob!;
                 a.download = previewFile.file;
+                a.target = '_blank';
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);

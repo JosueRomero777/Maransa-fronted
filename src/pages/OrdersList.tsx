@@ -331,9 +331,45 @@ const OrdersList: React.FC = () => {
     return dateString ? new Date(dateString).toLocaleDateString() : 'N/A';
   };
 
-  const canEditOrder = (order: Order) => {
-    if (user?.role !== 'ADMIN' && user?.role !== 'COMPRAS') return false;
-    return !['FINALIZADO', 'FACTURADO', 'DESCARTADO'].includes(order.estado);
+  const hasEditPermission = user?.role === 'ADMIN' || user?.role === 'COMPRAS';
+
+  const getEditDisabledReason = (order: Order): string | null => {
+    const editableStatuses = new Set([
+      'CREADO',
+      'EN_ANALISIS',
+      'APROBADO',
+      'RECHAZADO',
+      'EN_REEVALUACION',
+      'LABORATORIO_APROBADO',
+      'LABORATORIO_RECHAZADO',
+      'LABORATORIO_REEVALUACION',
+      'DEFINIENDO_COSECHA',
+      'COSECHA_DEFINIDA',
+      'COSECHA_RECHAZADA',
+    ]);
+
+    if (editableStatuses.has(order.estado)) {
+      return null;
+    }
+
+    const statusReasons: Record<string, string> = {
+      COSECHA_APROBADA: 'No se puede editar porque la cosecha ya fue aprobada',
+      LOGISTICA_ASIGNADA: 'No se puede editar porque el pedido ya pasó a logística',
+      EN_TRANSPORTE: 'No se puede editar porque el pedido está en transporte',
+      CUSTODIA_ASIGNADA: 'No se puede editar porque el pedido ya tiene custodia asignada',
+      EN_CUSTODIA: 'No se puede editar porque el pedido está en custodia',
+      CUSTODIA_COMPLETADA: 'No se puede editar porque la custodia ya fue completada',
+      ENTREGADO: 'No se puede editar porque el pedido ya fue entregado',
+      EN_COSECHA: 'No se puede editar porque el pedido ya está en cosecha',
+      EN_TRANSITO: 'No se puede editar porque el pedido está en tránsito',
+      RECIBIDO: 'No se puede editar porque el pedido ya fue recibido',
+      FACTURADO: 'No se puede editar porque el pedido ya fue facturado',
+      FINALIZADO: 'No se puede editar porque el pedido está finalizado',
+      CANCELADO: 'No se puede editar porque el pedido está cancelado',
+      DESCARTADO: 'No se puede editar porque el pedido está descartado',
+    };
+
+    return statusReasons[order.estado] || 'No se puede editar en el estado actual del pedido';
   };
 
   const canDeleteOrder = (order: Order) => {
@@ -645,14 +681,17 @@ const OrdersList: React.FC = () => {
                           </IconButton>
                         </Tooltip>
                         
-                        {canEditOrder(order) && (
-                          <Tooltip title="Editar">
-                            <IconButton
-                              size="small"
-                              onClick={() => navigate(`/orders/${order.id}/edit`)}
-                            >
-                              <EditIcon />
-                            </IconButton>
+                        {hasEditPermission && (
+                          <Tooltip title={getEditDisabledReason(order) || 'Editar'}>
+                            <span>
+                              <IconButton
+                                size="small"
+                                onClick={() => navigate(`/orders/${order.id}/edit`)}
+                                disabled={Boolean(getEditDisabledReason(order))}
+                              >
+                                <EditIcon />
+                              </IconButton>
+                            </span>
                           </Tooltip>
                         )}
                         
@@ -770,15 +809,18 @@ const OrdersList: React.FC = () => {
                       </IconButton>
                     </Tooltip>
                     
-                    {canEditOrder(order) && (
-                      <Tooltip title="Editar">
-                        <IconButton
-                          size="small"
-                          color="primary"
-                          onClick={() => navigate(`/orders/${order.id}/edit`)}
-                        >
-                          <EditIcon fontSize="small" />
-                        </IconButton>
+                    {hasEditPermission && (
+                      <Tooltip title={getEditDisabledReason(order) || 'Editar'}>
+                        <span>
+                          <IconButton
+                            size="small"
+                            color="primary"
+                            onClick={() => navigate(`/orders/${order.id}/edit`)}
+                            disabled={Boolean(getEditDisabledReason(order))}
+                          >
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </span>
                       </Tooltip>
                     )}
                     

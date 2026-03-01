@@ -13,7 +13,6 @@ import {
   Select,
   Switch,
   TextField,
-  Typography,
   Alert,
   CircularProgress,
 } from '@mui/material'
@@ -21,7 +20,7 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 import { TimeField } from '@mui/x-date-pickers/TimeField'
 import dayjs, { Dayjs } from 'dayjs'
 import { receptionService } from '../../services/reception.service'
-import type { Reception, CreateReceptionData, UpdateReceptionData, OrderForSelection } from '../../types/reception.types'
+import { CLASSIFICATION_OPTIONS, type Reception, type CreateReceptionData, type UpdateReceptionData, type OrderForSelection, type PackagerForSelection } from '../../types/reception.types'
 
 interface Props {
   reception?: Reception
@@ -32,7 +31,7 @@ interface Props {
 const ReceptionForm: React.FC<Props> = ({ reception, onSuccess, onCancel }) => {
   const isEdit = Boolean(reception)
   const [orders, setOrders] = useState<OrderForSelection[]>([])
-  const [classifications, setClassifications] = useState<string[]>([])
+  const [packagers, setPackagers] = useState<PackagerForSelection[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -47,18 +46,56 @@ const ReceptionForm: React.FC<Props> = ({ reception, onSuccess, onCancel }) => {
   const [precioFinalVenta, setPrecioFinalVenta] = useState<number | ''>(reception?.precioFinalVenta ?? '')
   const [condicionesVenta, setCondicionesVenta] = useState<string>(reception?.condicionesVenta ?? '')
   const [observaciones, setObservaciones] = useState<string>(reception?.observaciones ?? '')
+  const [selectedPackagerId, setSelectedPackagerId] = useState<number | ''>('')
 
-  const canSubmit = useMemo(() => orderId > 0 && fechaLlegada && horaLlegada, [orderId, fechaLlegada, horaLlegada])
+  const selectedOrder = useMemo(
+    () => orders.find((order) => order.id === orderId),
+    [orders, orderId],
+  )
+
+  const orderPackagerId = selectedOrder?.packager?.id
+  const effectivePackagerId = orderPackagerId || (selectedPackagerId !== '' ? Number(selectedPackagerId) : undefined)
+
+  const minFechaLlegada = useMemo(() => {
+    const fechaFinalizacionLogistica = selectedOrder?.logistica?.fechaFinalizacion
+    if (!fechaFinalizacionLogistica) return null
+    const parsed = dayjs(fechaFinalizacionLogistica)
+    return parsed.isValid() ? parsed.startOf('day') : null
+  }, [selectedOrder])
+
+  const canSubmit = useMemo(() => {
+    const hasOrder = orderId > 0
+    const hasFecha = Boolean(fechaLlegada)
+    const hasHora = Boolean(horaLlegada)
+    const hasPeso = pesoRecibido !== '' && Number(pesoRecibido) > 0
+    const hasClasificacion = clasificacionFinal.trim().length > 0
+    const hasPrecio = precioFinalVenta !== '' && Number(precioFinalVenta) > 0
+    const hasMotivoRechazo = loteAceptado || motivoRechazo.trim().length > 0
+    const hasPackager = isEdit || Boolean(effectivePackagerId)
+
+    return hasOrder && hasFecha && hasHora && hasPeso && hasClasificacion && hasPrecio && hasMotivoRechazo && hasPackager
+  }, [
+    orderId,
+    fechaLlegada,
+    horaLlegada,
+    pesoRecibido,
+    clasificacionFinal,
+    precioFinalVenta,
+    loteAceptado,
+    motivoRechazo,
+    isEdit,
+    effectivePackagerId,
+  ])
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [ordersData, classificationsData] = await Promise.all([
+        const [ordersData, packagersData] = await Promise.all([
           receptionService.getOrdersWithoutReception(),
-          receptionService.getClassifications(),
+          receptionService.getPackagers(),
         ])
         setOrders(ordersData)
-        setClassifications(classificationsData)
+        setPackagers(packagersData)
       } catch (err: any) {
         setError(err?.message || 'Error cargando datos')
       }
@@ -66,13 +103,34 @@ const ReceptionForm: React.FC<Props> = ({ reception, onSuccess, onCancel }) => {
     loadData()
   }, [])
 
+  useEffect(() => {
+    if (fechaLlegada && minFechaLlegada && fechaLlegada.isBefore(minFechaLlegada, 'day')) {
+      setFechaLlegada(minFechaLlegada)
+    }
+  }, [fechaLlegada, minFechaLlegada])
+
   const handleSubmit = async () => {
-    if (!canSubmit || !fechaLlegada || !horaLlegada) return
+    if (!canSubmit || !fechaLlegada || !horaLlegada) {
+      setError('Completa todos los campos obligatorios del formulario')
+      return
+    }
+
+    if (minFechaLlegada && fechaLlegada.isBefore(minFechaLlegada, 'day')) {
+      setError('La fecha de llegada no puede ser anterior a la fecha de finalización de logística')
+      return
+    }
+
+    if (!isEdit && !effectivePackagerId) {
+      setError('Debes seleccionar una empacadora para crear la recepción')
+      return
+    }
+
     setLoading(true)
     setError(null)
     try {
       const payload: CreateReceptionData | UpdateReceptionData = {
         orderId,
+        packagerId: !isEdit && !orderPackagerId && effectivePackagerId ? Number(effectivePackagerId) : undefined,
         fechaLlegada: fechaLlegada.format('YYYY-MM-DD'),
         horaLlegada: horaLlegada.format('HH:mm'),
         pesoRecibido: pesoRecibido === '' ? undefined : Number(pesoRecibido),
@@ -104,6 +162,7 @@ const ReceptionForm: React.FC<Props> = ({ reception, onSuccess, onCancel }) => {
         subheader="Completa la información de la recepción"
       />
       <CardContent>
+     
         <Box
           sx={{
             display: 'grid',
@@ -118,7 +177,10 @@ const ReceptionForm: React.FC<Props> = ({ reception, onSuccess, onCancel }) => {
                 <Select
                   label="Orden"
                   value={orderId || ''}
-                  onChange={(e) => setOrderId(Number(e.target.value))}
+                  onChange={(e) => {
+                    setOrderId(Number(e.target.value))
+                    setSelectedPackagerId('')
+                  }}
                 >
                   {orders.map((order) => (
                     <MenuItem key={order.id} value={order.id}>
@@ -131,12 +193,44 @@ const ReceptionForm: React.FC<Props> = ({ reception, onSuccess, onCancel }) => {
             </Box>
           )}
 
+          {!isEdit && orderId > 0 && (
+            <Box>
+              {selectedOrder?.packager ? (
+                <TextField
+                  fullWidth
+                  label="Empacadora"
+                  value={selectedOrder.packager.name}
+                  InputProps={{ readOnly: true }}
+                  helperText="Empacadora asociada a la orden"
+                />
+              ) : (
+                <FormControl fullWidth required>
+                  <InputLabel>Empacadora</InputLabel>
+                  <Select
+                    label="Empacadora"
+                    value={selectedPackagerId}
+                    onChange={(e) => setSelectedPackagerId(Number(e.target.value))}
+                  >
+                    <MenuItem value="" disabled>Selecciona una empacadora</MenuItem>
+                    {packagers.map((packager) => (
+                      <MenuItem key={packager.id} value={packager.id}>
+                        {packager.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  <FormHelperText>La orden no tiene empacadora asignada. Debes seleccionar una para continuar.</FormHelperText>
+                </FormControl>
+              )}
+            </Box>
+          )}
+
           <Box>
             <DatePicker
               label="Fecha de llegada"
               value={fechaLlegada}
               onChange={(val) => setFechaLlegada(val)}
-              slotProps={{ textField: { fullWidth: true } }}
+              minDate={minFechaLlegada || undefined}
+              slotProps={{ textField: { fullWidth: true, required: true } }}
             />
           </Box>
           <Box>
@@ -146,6 +240,7 @@ const ReceptionForm: React.FC<Props> = ({ reception, onSuccess, onCancel }) => {
               value={horaLlegada}
               onChange={(val) => setHoraLlegada(val)}
               fullWidth
+              required
             />
           </Box>
 
@@ -154,21 +249,22 @@ const ReceptionForm: React.FC<Props> = ({ reception, onSuccess, onCancel }) => {
               label="Peso recibido (lb)"
               type="number"
               fullWidth
+              required
               value={pesoRecibido}
               onChange={(e) => setPesoRecibido(e.target.value === '' ? '' : Number(e.target.value))}
             />
           </Box>
 
           <Box>
-            <FormControl fullWidth>
+            <FormControl fullWidth required>
               <InputLabel>Clasificación final</InputLabel>
               <Select
                 label="Clasificación final"
                 value={clasificacionFinal}
                 onChange={(e) => setClasificacionFinal(e.target.value)}
               >
-                <MenuItem value="">No asignada</MenuItem>
-                {classifications.map((c) => (
+                <MenuItem value="" disabled>Selecciona clasificación</MenuItem>
+                {CLASSIFICATION_OPTIONS.map((c) => (
                   <MenuItem key={c} value={c}>{c}</MenuItem>
                 ))}
               </Select>
@@ -180,6 +276,7 @@ const ReceptionForm: React.FC<Props> = ({ reception, onSuccess, onCancel }) => {
               label="Precio final de venta"
               type="number"
               fullWidth
+              required
               value={precioFinalVenta}
               onChange={(e) => setPrecioFinalVenta(e.target.value === '' ? '' : Number(e.target.value))}
             />
@@ -206,6 +303,7 @@ const ReceptionForm: React.FC<Props> = ({ reception, onSuccess, onCancel }) => {
             <FormControlLabel
               control={<Switch checked={loteAceptado} onChange={(e) => setLoteAceptado(e.target.checked)} />}
               label="Lote aceptado"
+              required
             />
           </Box>
 
@@ -216,6 +314,7 @@ const ReceptionForm: React.FC<Props> = ({ reception, onSuccess, onCancel }) => {
                 fullWidth
                 multiline
                 minRows={2}
+                required
                 value={motivoRechazo}
                 onChange={(e) => setMotivoRechazo(e.target.value)}
               />

@@ -218,7 +218,7 @@ const ReceptionDetail: React.FC<ReceptionDetailProps> = ({
                       Precio Estimado:
                     </Typography>
                     <Typography variant="body1">
-                      {formatCurrency(reception.order.precioEstimadoCompra)}
+                      {formatCurrency(reception.order.precioEstimadoVenta)}
                     </Typography>
                   </Grid>
                 </Grid>
@@ -329,12 +329,12 @@ const ReceptionDetail: React.FC<ReceptionDetailProps> = ({
                     <Typography 
                       variant="h6"
                       color={
-                        reception.precioFinalVenta >= reception.order.precioEstimadoCompra 
+                        reception.precioFinalVenta >= (reception.order.precioEstimadoVenta || 0)
                           ? 'success.main' 
                           : 'error.main'
                       }
                     >
-                      {formatCurrency(reception.precioFinalVenta - reception.order.precioEstimadoCompra)}
+                      {formatCurrency(reception.precioFinalVenta - (reception.order.precioEstimadoVenta || 0))}
                     </Typography>
                   </Grid>
                   <Grid item sx={{ width: { xs: '100%', md: '25%' } }}>

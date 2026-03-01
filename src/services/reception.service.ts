@@ -5,7 +5,8 @@ import type {
   UpdateReceptionData, 
   ReceptionFilter, 
   ReceptionListResponse,
-  OrderForSelection 
+  OrderForSelection,
+  PackagerForSelection
 } from '../types/reception.types';
 
 import { API_BASE_URL } from '../config/api.config';
@@ -66,5 +67,11 @@ export const receptionService = {
   async getOrdersWithoutReception(): Promise<OrderForSelection[]> {
     const response = await api.get('/receptions/orders-without-reception');
     return response.data;
+  },
+
+  async getPackagers(): Promise<PackagerForSelection[]> {
+    const response = await api.get('/packagers');
+    const data = response.data;
+    return Array.isArray(data) ? data : data?.data || [];
   }
 };

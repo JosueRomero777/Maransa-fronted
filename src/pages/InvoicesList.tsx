@@ -24,7 +24,7 @@ import {
   Stack,
   Divider,
 } from '@mui/material';
-import { Add, Visibility, Edit, AttachMoney, CheckCircle, Settings, Download, FileDownload, Clear } from '@mui/icons-material';
+import { Add, Visibility, Edit, AttachMoney, CheckCircle, Settings, Download, FileDownload, Clear, Autorenew } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import dayjs from 'dayjs';
@@ -47,6 +47,7 @@ export default function InvoicesList() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ severity: 'success' | 'info' | 'warning'; message: string } | null>(null);
   const [processing, setProcessing] = useState<number | null>(null); // ID de factura en procesamiento
 
   // Filtros
@@ -174,6 +175,7 @@ export default function InvoicesList() {
     try {
       setProcessing(id);
       setError(null);
+      setFeedback(null);
       const token = localStorage.getItem('token');
       const response = await fetch(`${API_BASE_URL}/invoicing/invoices/${id}/sign-and-authorize`, {
         method: 'POST',
@@ -183,9 +185,68 @@ export default function InvoicesList() {
         },
       });
 
+      const result = await response.json();
+
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = result;
         throw new Error(errorData.message || 'Error al firmar y autorizar factura');
+      }
+
+      if (result?.queued) {
+        setFeedback({
+          severity: 'info',
+          message: result.message || 'El comprobante está en cola. Consulta nuevamente más tarde.',
+        });
+      } else if (result?.authorized) {
+        setFeedback({
+          severity: 'success',
+          message: result.message || 'Comprobante autorizado exitosamente por el SRI.',
+        });
+      }
+
+      await loadInvoices();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  const handleCheckAuthorizationStatus = async (id: number) => {
+    try {
+      setProcessing(id);
+      setError(null);
+      setFeedback(null);
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_BASE_URL}/invoicing/invoices/${id}/check-authorization`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || 'Error al consultar autorización de la factura');
+      }
+
+      if (result?.authorized) {
+        setFeedback({
+          severity: 'success',
+          message: result.message || 'Comprobante autorizado exitosamente por el SRI.',
+        });
+      } else if (result?.queued) {
+        setFeedback({
+          severity: 'info',
+          message: result.message || 'El comprobante sigue en cola de procesamiento. Consulta más tarde.',
+        });
+      } else {
+        setFeedback({
+          severity: 'warning',
+          message: result.message || 'El comprobante no fue autorizado por el SRI.',
+        });
       }
 
       await loadInvoices();
@@ -431,6 +492,12 @@ export default function InvoicesList() {
         </Alert>
       )}
 
+      {feedback && (
+        <Alert severity={feedback.severity} sx={{ mb: 2 }} onClose={() => setFeedback(null)}>
+          {feedback.message}
+        </Alert>
+      )}
+
       {processing && (
         <Alert severity="info" sx={{ mb: 2 }}>
           Procesando factura... Esto puede tardar hasta 1 minuto. Por favor espere.
@@ -510,6 +577,30 @@ export default function InvoicesList() {
                           onClick={() => handleEmitInvoice(invoice.id)}
                         >
                           <CheckCircle fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </>
+                  )}
+                  {invoice.estado === 'EMITIDA' && (
+                    <>
+                      <Tooltip title="Firmar y Autorizar con SRI">
+                        <IconButton
+                          size="small"
+                          color="success"
+                          onClick={() => handleSignAndAuthorize(invoice.id)}
+                          disabled={processing === invoice.id}
+                        >
+                          {processing === invoice.id ? <CircularProgress size={20} /> : <CheckCircle fontSize="small" />}
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Consultar estado SRI">
+                        <IconButton
+                          size="small"
+                          color="info"
+                          onClick={() => handleCheckAuthorizationStatus(invoice.id)}
+                          disabled={processing === invoice.id}
+                        >
+                          {processing === invoice.id ? <CircularProgress size={20} /> : <Autorenew fontSize="small" />}
                         </IconButton>
                       </Tooltip>
                     </>
@@ -619,6 +710,16 @@ export default function InvoicesList() {
                               disabled={processing === invoice.id}
                             >
                               {processing === invoice.id ? <CircularProgress size={20} /> : <CheckCircle />}
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Consultar estado SRI">
+                            <IconButton
+                              size="small"
+                              color="info"
+                              onClick={() => handleCheckAuthorizationStatus(invoice.id)}
+                              disabled={processing === invoice.id}
+                            >
+                              {processing === invoice.id ? <CircularProgress size={20} /> : <Autorenew />}
                             </IconButton>
                           </Tooltip>
                         </>

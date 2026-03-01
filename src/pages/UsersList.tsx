@@ -33,6 +33,7 @@ import {
   PersonAdd as PersonAddIcon,
   Check as CheckIcon,
   Close as CloseIcon,
+  Edit as EditIcon,
 } from '@mui/icons-material';
 import { apiService } from '../services/api.service';
 
@@ -68,6 +69,8 @@ const UsersList: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
+
+  // Create User State
   const [openCreateDialog, setOpenCreateDialog] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -77,6 +80,19 @@ const UsersList: React.FC = () => {
     password: '',
     role: 'COMPRAS',
   });
+
+  // Edit User State
+  const [openEditDialog, setOpenEditDialog] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [editFormData, setEditFormData] = useState<{ name: string, email: string, role: string }>({
+    name: '',
+    email: '',
+    role: '',
+  });
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
+  // Confirm Dialog State
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
     userId: number;
@@ -136,11 +152,51 @@ const UsersList: React.FC = () => {
     }
   };
 
+  const handleEditClick = (user: User) => {
+    setEditingUser(user);
+    setEditFormData({
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    });
+    setOpenEditDialog(true);
+  };
+
+  const handleUpdateUser = async () => {
+    if (!editingUser) return;
+
+    try {
+      if (!editFormData.name.trim() || !editFormData.email.trim()) {
+        setEditError('Nombre y Email son requeridos');
+        return;
+      }
+
+      setEditLoading(true);
+      setEditError(null);
+
+      await apiService.patch(`/users/${editingUser.id}`, {
+        name: editFormData.name,
+        email: editFormData.email,
+        role: editFormData.role,
+      });
+
+      setOpenEditDialog(false);
+      setEditingUser(null);
+      await loadUsers();
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Error al actualizar usuario';
+      setEditError(errorMsg);
+      console.error('Error actualizando usuario:', err);
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
   const handleAction = async (userId: number, action: 'activate' | 'deactivate') => {
     try {
       setActionLoading(userId);
       await apiService.patch(`/users/${userId}/${action}`, {});
-      await loadUsers(); // Recargar la lista
+      await loadUsers();
       setConfirmDialog(null);
     } catch (err) {
       console.error(`Error al ${action} usuario:`, err);
@@ -233,6 +289,14 @@ const UsersList: React.FC = () => {
                   </TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', gap: 1 }}>
+                      <IconButton
+                        size="small"
+                        color="primary"
+                        onClick={() => handleEditClick(user)}
+                        disabled={actionLoading === user.id}
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
                       {user.active ? (
                         <IconButton
                           size="small"
@@ -336,7 +400,17 @@ const UsersList: React.FC = () => {
                   </Box>
                 </Stack>
 
-                <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
+                <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+                  <Button
+                    variant="outlined"
+                    color="primary"
+                    size="small"
+                    startIcon={<EditIcon />}
+                    onClick={() => handleEditClick(user)}
+                    disabled={actionLoading === user.id}
+                  >
+                    Editar
+                  </Button>
                   {user.active ? (
                     <Button
                       variant="outlined"
@@ -422,13 +496,13 @@ const UsersList: React.FC = () => {
             Crear Nuevo Usuario
           </Typography>
         </DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
+        <DialogContent dividers sx={{ pt: 2 }}>
           {createError && (
             <Alert severity="error" sx={{ mb: 2 }}>
               {createError}
             </Alert>
           )}
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
             <TextField
               label="Nombre"
               fullWidth
@@ -479,6 +553,75 @@ const UsersList: React.FC = () => {
             disabled={createLoading}
           >
             {createLoading ? <CircularProgress size={20} /> : 'Crear Usuario'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Diálogo de editar usuario */}
+      <Dialog
+        open={openEditDialog}
+        onClose={() => {
+          if (!editLoading) {
+            setOpenEditDialog(false);
+            setEditError(null);
+          }
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ pb: 1 }}>
+          <Typography variant="h6" component="div" sx={{ fontWeight: 600 }}>
+            Editar Usuario: {editingUser?.name}
+          </Typography>
+        </DialogTitle>
+        <DialogContent dividers sx={{ pt: 2 }}>
+          {editError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {editError}
+            </Alert>
+          )}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <TextField
+              label="Nombre"
+              fullWidth
+              value={editFormData.name}
+              onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+              disabled={editLoading}
+            />
+            <TextField
+              label="Email"
+              type="email"
+              fullWidth
+              value={editFormData.email}
+              onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+              disabled={editLoading}
+            />
+            <FormControl fullWidth disabled={editLoading}>
+              <InputLabel>Rol</InputLabel>
+              <Select
+                value={editFormData.role}
+                label="Rol"
+                onChange={(e) => setEditFormData({ ...editFormData, role: e.target.value })}
+              >
+                {roles.map((role) => (
+                  <MenuItem key={role.value} value={role.value}>
+                    {role.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenEditDialog(false)} disabled={editLoading}>
+            Cancelar
+          </Button>
+          <Button
+            onClick={handleUpdateUser}
+            variant="contained"
+            disabled={editLoading}
+          >
+            {editLoading ? <CircularProgress size={20} /> : 'Guardar Cambios'}
           </Button>
         </DialogActions>
       </Dialog>

@@ -35,7 +35,7 @@ export const useCustodyTracking = (custodyId: number, userId: number, autoJoin: 
     trackerEmail: null
   });
 
-  const locationUpdateIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const locationUpdateIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastLocationRef = useRef<LocationData | null>(null);
 
   useEffect(() => {
@@ -227,6 +227,15 @@ export const useCustodyTracking = (custodyId: number, userId: number, autoJoin: 
     try {
       stopGeolocation();
       await custodyWebSocketService.stopTracking(custodyId);
+      setState(prev => ({
+        ...prev,
+        isTracking: false,
+        sessionId: null,
+        isOwner: false,
+        trackerUserId: null,
+        trackerName: null,
+        trackerEmail: null
+      }));
     } catch (error: any) {
       setState(prev => ({ ...prev, error: error.message }));
     }

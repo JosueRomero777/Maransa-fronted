@@ -43,9 +43,25 @@ export type Logistics = {
     codigo: string
     estado: string
     cantidadEstimada: number
+    cantidadFinal?: number
+    fechaDefinitivaCosecha?: string
     provider: {
       id: number
       name: string
+      location: string
+    }
+    packager?: {
+      id: number
+      name: string
+      location: string
+    }
+    laboratorio?: any
+    cosecha?: {
+      id: number
+      temperaturaOptima?: number
+      tiempoMaximoTransporte?: number
+      condicionesCosecha?: string
+      requerimientosEspeciales?: string
     }
   }
   assignedUser?: {
@@ -99,7 +115,7 @@ class LogisticsService {
         }
       });
     }
-    
+
     const endpoint = `/logistics${params.toString() ? `?${params}` : ''}`;
     return apiService.get<Logistics[]>(endpoint);
   }
@@ -173,13 +189,13 @@ class LogisticsService {
 
   async downloadFile(id: number, filename: string): Promise<void> {
     const token = localStorage.getItem('token');
-    
+
     if (!token) {
       throw new Error('No authentication token found. Please log in again.');
     }
-    
+
     console.log('Downloading file:', { id, filename, hasToken: !!token });
-    
+
     const response = await fetch(`${API_BASE_URL}/logistics/${id}/files/${filename}`, {
       method: 'GET',
       headers: {

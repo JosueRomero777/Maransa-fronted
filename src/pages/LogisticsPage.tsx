@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { API_BASE_URL } from '../config/api.config';
 import {
   Box,
@@ -80,6 +80,7 @@ export default function LogisticsPage() {
   const [items, setItems] = useState<Logistics[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const modalContentRef = useRef<HTMLDivElement>(null);
   const [selectedLogistics, setSelectedLogistics] = useState<Logistics | null>(null);
   const [selectedCustody, setSelectedCustody] = useState<any | null>(null);
   const [tabValue, setTabValue] = useState(0);
@@ -100,20 +101,20 @@ export default function LogisticsPage() {
         try {
           const token = localStorage.getItem('token');
           console.log('Loading preview for:', { logId: previewFile.logId, file: previewFile.file, hasToken: !!token });
-          
+
           const response = await fetch(`${API_BASE_URL}/logistics/${previewFile.logId}/files/${previewFile.file}`, {
             headers: {
               'Authorization': `Bearer ${token}`
             }
           });
-          
+
           console.log('Preview fetch response status:', response.status);
-          
+
           if (!response.ok) {
             console.error('Preview fetch error:', response.status, response.statusText);
             throw new Error(`Failed to load file: ${response.statusText}`);
           }
-          
+
           const blob = await response.blob();
           const blobUrl = URL.createObjectURL(blob);
           setPreviewFile({ ...previewFile, blob: blobUrl });
@@ -126,6 +127,12 @@ export default function LogisticsPage() {
   }, [previewFile]);
   const [routePlanLoading, setRoutePlanLoading] = useState(false);
   const [showRouteMap, setShowRouteMap] = useState(false);
+
+  useEffect(() => {
+    if (formDialog.open && error) {
+      modalContentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [error, formDialog.open]);
 
   const currentUserId = user?.id ?? 0;
   const {
@@ -210,7 +217,7 @@ export default function LogisticsPage() {
         // Detectar si es un objeto de Harvest (tiene order anidado) o un Order directo
         const isHarvest = o.order !== undefined;
         const orderData = isHarvest ? o.order : o;
-        
+
         return {
           id: orderData.id,
           codigo: orderData.codigo,
@@ -313,6 +320,11 @@ export default function LogisticsPage() {
       return;
     }
 
+    if (!newLogisticsForm.rutaPlanificada) {
+      setError('Debes generar la ruta ideal antes de crear la logística');
+      return;
+    }
+
     setFormLoading(true);
     setError(null);
     try {
@@ -329,12 +341,12 @@ export default function LogisticsPage() {
       };
 
       const created = await logisticsService.createLogistics(dto);
-      
+
       // Si hay archivos, subirlos después
       if (newLogisticsForm.archivos) {
         await logisticsService.uploadFiles(created.id, newLogisticsForm.archivos);
       }
-      
+
       setFormDialog({ open: false });
       await loadData();
     } catch (err: any) {
@@ -346,8 +358,16 @@ export default function LogisticsPage() {
 
   const handleAssignVehicle = async () => {
     if (!selectedLogistics) return;
-    if (!assignForm.vehiculoAsignado || !assignForm.choferAsignado) {
-      setError('Completa todos los campos');
+    const plateRegex = /^[A-Z]{3}-\d{3,4}$/;
+    const idRegex = /^\d{10}$/;
+
+    if (!plateRegex.test(assignForm.vehiculoAsignado)) {
+      setError('El vehículo debe ser una placa válida (EJ: ABC-1234)');
+      return;
+    }
+
+    if (!idRegex.test(assignForm.choferAsignado)) {
+      setError('El chofer debe ser un número de cédula válido (10 dígitos)');
       return;
     }
 
@@ -395,7 +415,7 @@ export default function LogisticsPage() {
 
   const handleUploadEvidence = async () => {
     if (!selectedLogistics) return;
-    
+
     // Combinar archivos capturados con archivos subidos
     const allFiles: File[] = [...capturedFiles];
     if (evidenceForm.archivos) {
@@ -416,12 +436,12 @@ export default function LogisticsPage() {
     setError(null);
     try {
       console.log('Uploading evidence with tipo:', evidenceForm.tipo); // Debug log
-      
+
       // Convertir array de Files a FileList
       const dataTransfer = new DataTransfer();
       allFiles.forEach(file => dataTransfer.items.add(file));
       const fileList = dataTransfer.files;
-      
+
       await logisticsService.addEvidence(selectedLogistics.id, evidenceForm.tipo, 'Evidencia adjuntada', fileList);
       setEvidenceDialog({ open: false });
       setEvidenceForm({ tipo: 'carga', archivos: null });
@@ -457,12 +477,27 @@ export default function LogisticsPage() {
     setError(null);
     setFormLoading(true);
     try {
+      // Verificar si faltan medios o evidencias de carga
+      if (!selectedLogistics.recursosUtilizados || (selectedLogistics.recursosUtilizados as string).trim() === '') {
+        throw new Error('Debes registrar los Medios Utilizados (Bines, Tanques u Oxígeno) antes de iniciar el transporte.');
+      }
+
+      if (!selectedLogistics.evidenciasCarga || selectedLogistics.evidenciasCarga.length === 0) {
+        throw new Error('Debes subir al menos una Evidencia de Carga antes de iniciar el transporte.');
+      }
+
       // Verificar si faltan coordenadas y si es así, mostrar error
-      if (!selectedLogistics.origenLat || !selectedLogistics.origenLng || 
-          !selectedLogistics.destinoLat || !selectedLogistics.destinoLng) {
+      if (!selectedLogistics.origenLat || !selectedLogistics.origenLng ||
+        !selectedLogistics.destinoLat || !selectedLogistics.destinoLng) {
         throw new Error('Esta logística no tiene coordenadas definidas. Por favor, crea una nueva logística usando "Generar ruta ideal".');
       }
-      await logisticsService.startRoute(selectedLogistics.id);
+
+      // Solo llamar a startRoute si el estado es ASIGNADO
+      // Si ya está EN_RUTA, solo reactivamos el tracking por socket
+      if (selectedLogistics.estado === 'ASIGNADO') {
+        await logisticsService.startRoute(selectedLogistics.id);
+      }
+
       await startTracking();
 
       await loadData();
@@ -478,7 +513,7 @@ export default function LogisticsPage() {
       } else if (error?.message) {
         errorMessage = error.message;
       }
-      
+
       console.error('Mensaje de error final:', errorMessage);
       setError(errorMessage);
       setTrackingDialog({ open: false });
@@ -667,6 +702,41 @@ export default function LogisticsPage() {
                       multiline
                       minRows={2}
                     />
+
+                    {/* Nueva sección: Requerimientos de Cosecha */}
+                    {selectedLogistics.order?.cosecha && (
+                      <Box sx={{ mt: 2, p: 2, bgcolor: '#f0f7ff', borderRadius: 1, border: '1px solid #cce3ff' }}>
+                        <Typography variant="subtitle2" color="primary" gutterBottom sx={{ fontWeight: 'bold' }}>
+                          Requerimientos de Cosecha (Crítico)
+                        </Typography>
+                        <Stack spacing={1}>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <Typography variant="body2"><strong>Temperatura Óptima:</strong></Typography>
+                            <Typography variant="body2" color="error">{selectedLogistics.order.cosecha.temperaturaOptima ?? 'N/A'} °C</Typography>
+                          </Box>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <Typography variant="body2"><strong>Tiempo Máx. Transporte:</strong></Typography>
+                            <Typography variant="body2" color="error">{selectedLogistics.order.cosecha.tiempoMaximoTransporte ?? 'N/A'} Horas</Typography>
+                          </Box>
+                          {selectedLogistics.order.cosecha.condicionesCosecha && (
+                            <Box>
+                              <Typography variant="body2"><strong>Condiciones:</strong></Typography>
+                              <Typography variant="caption" display="block" sx={{ whiteSpace: 'pre-wrap' }}>
+                                {selectedLogistics.order.cosecha.condicionesCosecha}
+                              </Typography>
+                            </Box>
+                          )}
+                          {selectedLogistics.order.cosecha.requerimientosEspeciales && (
+                            <Box>
+                              <Typography variant="body2"><strong>Requerimientos Especiales:</strong></Typography>
+                              <Typography variant="caption" display="block" sx={{ whiteSpace: 'pre-wrap', color: '#d32f2f' }}>
+                                {selectedLogistics.order.cosecha.requerimientosEspeciales}
+                              </Typography>
+                            </Box>
+                          )}
+                        </Stack>
+                      </Box>
+                    )}
                   </Stack>
                 </TabPanel>
 
@@ -723,14 +793,14 @@ export default function LogisticsPage() {
                     {(() => {
                       // Mostrar mapa si está EN_RUTA y tiene coordenadas válidas
                       // No importa si hay errores temporales de GPS, el mapa debe seguir visible
-                      const hasValidCoordinates = selectedLogistics.origenLat && 
-                                                 selectedLogistics.origenLng &&
-                                                 selectedLogistics.destinoLat && 
-                                                 selectedLogistics.destinoLng;
-                      
-                      const shouldShow = selectedLogistics.estado === EstadoLogistica.EN_RUTA && 
-                                       hasValidCoordinates;
-                      
+                      const hasValidCoordinates = selectedLogistics.origenLat &&
+                        selectedLogistics.origenLng &&
+                        selectedLogistics.destinoLat &&
+                        selectedLogistics.destinoLng;
+
+                      const shouldShow = selectedLogistics.estado === EstadoLogistica.EN_RUTA &&
+                        hasValidCoordinates;
+
                       return shouldShow ? (
                         <Box sx={{ mt: 3 }}>
                           <Typography variant="h6" gutterBottom>
@@ -760,10 +830,10 @@ export default function LogisticsPage() {
                             origin={
                               selectedLogistics.origenLat && selectedLogistics.origenLng
                                 ? {
-                                    lat: selectedLogistics.origenLat,
-                                    lng: selectedLogistics.origenLng,
-                                    name: selectedLogistics.ubicacionOrigen || 'Origen'
-                                  }
+                                  lat: selectedLogistics.origenLat,
+                                  lng: selectedLogistics.origenLng,
+                                  name: selectedLogistics.ubicacionOrigen || 'Origen'
+                                }
                                 : null
                             }
                             currentLocation={(() => {
@@ -819,7 +889,7 @@ export default function LogisticsPage() {
                 <TabPanel value={tabValue} index={2}>
                   <Stack spacing={2}>
                     <TextField
-                      label="Medios Utilizados (vines, tanques, oxígeno, etc.)"
+                      label="Medios Utilizados (Bines, tanques, oxígeno.)"
                       fullWidth
                       value={selectedLogistics.recursosUtilizados || ''}
                       disabled
@@ -948,7 +1018,7 @@ export default function LogisticsPage() {
         PaperProps={{ sx: { width: '96vw', maxWidth: '96vw', height: '90vh' } }}
       >
         <DialogTitle>Nueva Logística</DialogTitle>
-        <DialogContent dividers sx={{ height: '100%' }}>
+        <DialogContent ref={modalContentRef} dividers sx={{ height: '100%' }}>
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
           <Stack spacing={2} mt={1}>
             <FormControl fullWidth required>
@@ -1014,30 +1084,30 @@ export default function LogisticsPage() {
             />
             <Stack spacing={1}>
               <Typography variant="subtitle2">Ruta Planificada</Typography>
-              
+
               {/* Mostrar mapa de ruta solo cuando se genera la ruta ideal */}
-              {showRouteMap && newLogisticsForm.origenLat && newLogisticsForm.origenLng && 
-               newLogisticsForm.destinoLat && newLogisticsForm.destinoLng && (
-                <Box sx={{ 
-                  border: '1px solid #ddd', 
-                  borderRadius: 1, 
-                  overflow: 'hidden',
-                  mb: 2
-                }}>
-                  <RouteMap
-                    origin={{
-                      lat: newLogisticsForm.origenLat,
-                      lng: newLogisticsForm.origenLng,
-                      address: newLogisticsForm.ubicacionOrigen
-                    }}
-                    destination={{
-                      lat: newLogisticsForm.destinoLat,
-                      lng: newLogisticsForm.destinoLng,
-                      address: newLogisticsForm.ubicacionDestino
-                    }}
-                  />
-                </Box>
-              )}
+              {showRouteMap && newLogisticsForm.origenLat && newLogisticsForm.origenLng &&
+                newLogisticsForm.destinoLat && newLogisticsForm.destinoLng && (
+                  <Box sx={{
+                    border: '1px solid #ddd',
+                    borderRadius: 1,
+                    overflow: 'hidden',
+                    mb: 2
+                  }}>
+                    <RouteMap
+                      origin={{
+                        lat: newLogisticsForm.origenLat,
+                        lng: newLogisticsForm.origenLng,
+                        address: newLogisticsForm.ubicacionOrigen
+                      }}
+                      destination={{
+                        lat: newLogisticsForm.destinoLat,
+                        lng: newLogisticsForm.destinoLng,
+                        address: newLogisticsForm.ubicacionDestino
+                      }}
+                    />
+                  </Box>
+                )}
 
               <TextField
                 label="Descripción de la Ruta"
@@ -1045,11 +1115,12 @@ export default function LogisticsPage() {
                 multiline
                 minRows={2}
                 value={newLogisticsForm.rutaPlanificada}
-                helperText="El sistema genera una ruta ideal; edítala si necesitas especificaciones adicionales"
-                onChange={(e) => setNewLogisticsForm((prev) => ({ ...prev, rutaPlanificada: e.target.value }))}
-                placeholder="Ej: Pasar por la ruta 5, evitar vías no pavimentadas, hora máxima de salida 06:00"
+                helperText="Haz clic en 'Generar Ruta Ideal' para rellenar este campo automáticamente"
+                InputProps={{ readOnly: true }}
+                required
+                placeholder="Ruta generada por el sistema..."
               />
-              
+
               <Stack direction="row" spacing={1}>
                 <Button
                   variant="contained"
@@ -1114,18 +1185,21 @@ export default function LogisticsPage() {
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
           <Stack spacing={2} mt={1}>
             <TextField
-              label="Vehículo (Placa, Modelo)"
+              label="Placa del Vehículo"
               fullWidth
               value={assignForm.vehiculoAsignado}
-              onChange={(e) => setAssignForm((prev) => ({ ...prev, vehiculoAsignado: e.target.value }))}
-              placeholder="Ej: AUX-123, Toyota Hiadce"
+              onChange={(e) => setAssignForm((prev) => ({ ...prev, vehiculoAsignado: e.target.value.toUpperCase() }))}
+              placeholder="Ej: ABC-1234"
+              helperText="Formato: 3 letras, guión y 3 o 4 números"
             />
             <TextField
-              label="Chofer (Nombre, Cédula)"
+              label="Cédula del Chofer"
               fullWidth
               value={assignForm.choferAsignado}
-              onChange={(e) => setAssignForm((prev) => ({ ...prev, choferAsignado: e.target.value }))}
-              placeholder="Ej: Juan Pérez, 0965432123"
+              onChange={(e) => setAssignForm((prev) => ({ ...prev, choferAsignado: e.target.value.replace(/\D/g, '') }))}
+              placeholder="Ej: 0965432123"
+              inputProps={{ maxLength: 10 }}
+              helperText="Exactamente 10 dígitos"
             />
           </Stack>
         </DialogContent>
@@ -1143,16 +1217,32 @@ export default function LogisticsPage() {
       <Dialog open={mediaDialog.open} onClose={() => setMediaDialog({ open: false })} maxWidth="sm" fullWidth>
         <DialogTitle>Registrar Medios Utilizados</DialogTitle>
         <DialogContent dividers>
-          <TextField
-            label="Medios (vines, tanques, oxígeno, etc.)"
-            fullWidth
-            multiline
-            minRows={4}
-            value={mediaForm.recursosUtilizados}
-            onChange={(e) => setMediaForm({ recursosUtilizados: e.target.value })}
-            sx={{ mt: 2 }}
-            placeholder="Ej: 2 tanques de 500L, 3 bombas de oxígeno, 10 redes de contención"
-          />
+          <FormControl fullWidth sx={{ mt: 2 }}>
+            <InputLabel>Seleccionar Medios</InputLabel>
+            <Select
+              multiple
+              label="Seleccionar Medios"
+              value={mediaForm.recursosUtilizados ? (mediaForm.recursosUtilizados as string).split(',').map(s => s.trim()).filter(s => s !== '') : []}
+              onChange={(e) => {
+                const values = e.target.value as string[];
+                setMediaForm({ recursosUtilizados: values.join(', ') });
+              }}
+              renderValue={(selected) => (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                  {(selected as string[]).map((value) => (
+                    <Chip key={value} label={value} size="small" />
+                  ))}
+                </Box>
+              )}
+            >
+              <MenuItem value="Bines">Bines</MenuItem>
+              <MenuItem value="Tanques">Tanques</MenuItem>
+              <MenuItem value="Oxígeno">Oxígeno</MenuItem>
+            </Select>
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+              Selecciona todos los que apliquen para este transporte
+            </Typography>
+          </FormControl>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setMediaDialog({ open: false })} disabled={formLoading}>
@@ -1181,7 +1271,7 @@ export default function LogisticsPage() {
                 <MenuItem value="condiciones">Condiciones del Transporte</MenuItem>
               </Select>
             </FormControl>
-            
+
             <Box>
               <Typography variant="subtitle2" sx={{ mb: 1 }}>
                 Capturar Foto
@@ -1217,7 +1307,7 @@ export default function LogisticsPage() {
                 </List>
               </Box>
             )}
-            
+
             <Box>
               <Typography variant="subtitle2" sx={{ mb: 1 }}>
                 O Seleccionar Archivos

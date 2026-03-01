@@ -17,7 +17,6 @@ import {
   Grid,
   Card,
   CardContent,
-  Chip,
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { ArrowBack as ArrowBackIcon } from '@mui/icons-material';
@@ -26,12 +25,10 @@ import dayjs from 'dayjs';
 import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
-import { useAuth } from '../context';
 import { API_BASE_URL } from '../config/api.config';
-import shrimpSizesService, { 
-  type ShrimpType, 
-  type PresentationType, 
-  type ShrimpSize 
+import shrimpSizesService, {
+  type PresentationType,
+  type ShrimpSize
 } from '../services/shrimp-sizes.service';
 
 interface OrderFormData {
@@ -43,7 +40,7 @@ interface OrderFormData {
   cantidadEstimada: number;
   fechaTentativaCosecha?: dayjs.Dayjs | null;
   precioEstimadoCompra?: number;
-  precioEstimadoVenta?: number;
+  // precioEstimadoVenta?: number; // Eliminado, se calcula automáticamente
   condicionesIniciales?: string;
   observaciones?: string;
 }
@@ -71,15 +68,15 @@ const orderSchema = yup.object({
     .number()
     .required('La cantidad estimada es requerida')
     .min(0.1, 'La cantidad debe ser mayor a 0'),
-  fechaTentativaCosecha: yup.mixed().optional(),
+  fechaTentativaCosecha: yup.mixed().nullable().optional(),
   precioEstimadoCompra: yup
     .number()
     .optional()
     .min(0, 'El precio debe ser mayor o igual a 0'),
-  precioEstimadoVenta: yup
-    .number()
-    .optional()
-    .min(0, 'El precio debe ser mayor o igual a 0'),
+  // precioEstimadoVenta: yup
+  //   .number()
+  //   .optional()
+  //   .min(0, 'El precio debe ser mayor o igual a 0'),
   condicionesIniciales: yup.string().optional(),
   observaciones: yup.string().optional(),
 });
@@ -87,7 +84,6 @@ const orderSchema = yup.object({
 const OrderForm: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
   const isEdit = Boolean(id);
 
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -113,7 +109,7 @@ const OrderForm: React.FC = () => {
     watch,
     reset,
   } = useForm<OrderFormData>({
-    resolver: yupResolver(orderSchema),
+    resolver: yupResolver(orderSchema) as any,
     defaultValues: {
       cantidadEstimada: 0,
     },
@@ -143,7 +139,7 @@ const OrderForm: React.FC = () => {
   // Cargar tallas cuando se selecciona presentación
   const handlePresentationTypeChange = async (presentationTypeId: number) => {
     setValue('presentationTypeId', presentationTypeId);
-    
+
     try {
       const sizes = await shrimpSizesService.getShrimpSizesByPresentation(presentationTypeId);
       setShrimpSizes(sizes);
@@ -164,7 +160,7 @@ const OrderForm: React.FC = () => {
     try {
       const token = localStorage.getItem('token');
       console.log('🔑 Token:', token ? 'Disponible' : 'No disponible');
-      
+
       const response = await fetch(`${API_BASE_URL}/providers`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -172,7 +168,7 @@ const OrderForm: React.FC = () => {
       });
 
       console.log('📡 Response status:', response.status);
-      
+
       if (response.ok) {
         const data = await response.json();
         console.log('✅ Datos recibidos:', data);
@@ -221,18 +217,43 @@ const OrderForm: React.FC = () => {
       }
 
       const order = await response.json();
-      
+
+      const orderPresentationTypeId = order.presentationTypeId ?? order.presentationType?.id;
+      const orderShrimpSizeId = order.shrimpSizeId ?? order.shrimpSize?.id;
+
+      let sizesForPresentation: ShrimpSize[] = [];
+      if (orderPresentationTypeId) {
+        try {
+          sizesForPresentation = await shrimpSizesService.getShrimpSizesByPresentation(Number(orderPresentationTypeId));
+          setShrimpSizes(sizesForPresentation);
+        } catch (error) {
+          console.error('Error loading shrimp sizes for existing order:', error);
+          setShrimpSizes([]);
+        }
+      } else {
+        setShrimpSizes([]);
+      }
+
+      if (orderShrimpSizeId) {
+        const existingSize = sizesForPresentation.find((size) => size.id === Number(orderShrimpSizeId));
+        setSelectedShrimpSize(existingSize || null);
+      } else {
+        setSelectedShrimpSize(null);
+      }
+
       // Llenar el formulario con los datos existentes
       reset({
         providerId: order.providerId,
         packagerId: order.packagerId || undefined,
+        presentationTypeId: orderPresentationTypeId ? Number(orderPresentationTypeId) : undefined,
+        shrimpSizeId: orderShrimpSizeId ? Number(orderShrimpSizeId) : undefined,
         tallaEstimada: order.tallaEstimada || undefined,
         cantidadEstimada: order.cantidadEstimada,
-        fechaTentativaCosecha: order.fechaTentativaCosecha 
+        fechaTentativaCosecha: order.fechaTentativaCosecha
           ? dayjs(order.fechaTentativaCosecha)
           : null,
         precioEstimadoCompra: order.precioEstimadoCompra || undefined,
-        precioEstimadoVenta: order.precioEstimadoVenta || undefined,
+        // precioEstimadoVenta: order.precioEstimadoVenta || undefined,
         condicionesIniciales: order.condicionesIniciales || undefined,
         observaciones: order.observaciones || undefined,
       });
@@ -247,19 +268,19 @@ const OrderForm: React.FC = () => {
     try {
       setSubmitLoading(true);
       setError(null);
-      
+
       // Convertir fecha a string para el backend
       const submitData = {
         ...data,
         fechaTentativaCosecha: data.fechaTentativaCosecha
           ? data.fechaTentativaCosecha.format('YYYY-MM-DD')
-          : undefined,
+          : null,
       };
-      
-      const url = isEdit 
+
+      const url = isEdit
         ? `${API_BASE_URL}/orders/${id}`
         : `${API_BASE_URL}/orders`;
-      
+
       const method = isEdit ? 'PATCH' : 'POST';
 
       const response = await fetch(url, {
@@ -274,6 +295,38 @@ const OrderForm: React.FC = () => {
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || 'Error al guardar el pedido');
+      }
+
+      // Obtener datos para WhatsApp si es un nuevo pedido
+      if (!isEdit) {
+        const selectedProvider = providers.find(p => p.id === Number(data.providerId));
+        const selectedPresentation = presentationTypes.find(p => p.id === Number(data.presentationTypeId));
+        const selectedSize = shrimpSizes.find(s => s.id === Number(data.shrimpSizeId));
+
+        if (selectedProvider && selectedProvider.contact_whatsapp) {
+          const presentationName = selectedPresentation ? selectedPresentation.name : 'No especificada';
+          const sizeName = selectedSize ? selectedSize.displayLabel : (data.tallaEstimada || 'No especificada');
+
+          const message = `Hola ${selectedProvider.name}, se ha generado un nuevo pedido en Maransa:\n` +
+            `- *Presentación:* ${presentationName}\n` +
+            `- *Talla:* ${sizeName}\n` +
+            `- *Cantidad:* ${data.cantidadEstimada} lbs`;
+
+          const encodedMessage = encodeURIComponent(message);
+          let cleanPhone = selectedProvider.contact_whatsapp.replace(/\D/g, '');
+
+          // Asegurar código de país (593 para Ecuador) si es necesario
+          if (cleanPhone.startsWith('0') && cleanPhone.length === 10) {
+            cleanPhone = '593' + cleanPhone.substring(1);
+          } else if (cleanPhone.length === 9 && cleanPhone.startsWith('9')) {
+            cleanPhone = '593' + cleanPhone;
+          }
+
+          // Abrir WhatsApp en una nueva pestaña después de un pequeño delay
+          setTimeout(() => {
+            window.open(`https://wa.me/${cleanPhone}/?text=${encodedMessage}`, '_blank');
+          }, 1500);
+        }
       }
 
       setSuccess(
@@ -294,34 +347,23 @@ const OrderForm: React.FC = () => {
     }
   };
 
-  const selectedProvider = watch('providerId');
   const cantidadEstimada = watch('cantidadEstimada');
   const precioEstimadoCompra = watch('precioEstimadoCompra');
-  const precioEstimadoVenta = watch('precioEstimadoVenta');
 
-  // Calcular totales estimados
   const totalEstimadoCompra = cantidadEstimada && precioEstimadoCompra
     ? cantidadEstimada * precioEstimadoCompra
-    : 0;
-  
-  const totalEstimadoVenta = cantidadEstimada && precioEstimadoVenta
-    ? cantidadEstimada * precioEstimadoVenta
-    : 0;
-
-  const margenEstimado = totalEstimadoVenta && totalEstimadoCompra
-    ? ((totalEstimadoVenta - totalEstimadoCompra) / totalEstimadoCompra) * 100
     : 0;
 
   if (loading) {
     return (
-      <Grid item sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
+      <Grid sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
         <CircularProgress />
       </Grid>
     );
   }
 
   return (
-    <Grid item sx={{ p: 3 }}>
+    <Grid sx={{ p: 3 }}>
       {/* Breadcrumbs */}
       <Breadcrumbs sx={{ mb: 2 }}>
         <Link
@@ -340,7 +382,7 @@ const OrderForm: React.FC = () => {
       </Breadcrumbs>
 
       {/* Header */}
-      <Grid item sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+      <Grid sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
         <Button
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate('/orders')}
@@ -365,15 +407,15 @@ const OrderForm: React.FC = () => {
         </Alert>
       )}
 
-      <form onSubmit={handleSubmit(onSubmit)}>
-        <Grid item sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <form onSubmit={handleSubmit(onSubmit as any)}>
+        <Grid sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           {/* Información básica */}
-          <Grid item sx={{ width: '100%' }}>
+          <Grid sx={{ width: '100%' }}>
             <Paper sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom>
                 Información Básica
               </Typography>
-              
+
               <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 3 }}>
                 <Box>
                   <Controller
@@ -584,14 +626,14 @@ const OrderForm: React.FC = () => {
           </Grid>
 
           {/* Información comercial */}
-          <Grid item sx={{ width: '100%' }}>
+          <Grid sx={{ width: '100%' }}>
             <Paper sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom>
                 Información Comercial
               </Typography>
-              
-              <Grid item sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-                <Grid item sx={{ width: { xs: '100%', md: '50%' } }}>
+
+              <Grid sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                <Grid sx={{ width: { xs: '100%', md: '50%' } }}>
                   <Controller
                     name="precioEstimadoCompra"
                     control={control}
@@ -613,37 +655,17 @@ const OrderForm: React.FC = () => {
                   />
                 </Grid>
 
-                <Grid item xs={12} md={6}>
-                  <Controller
-                    name="precioEstimadoVenta"
-                    control={control}
-                    render={({ field }) => (
-                      <TextField
-                        {...field}
-                        fullWidth
-                        label="Precio Estimado de Venta"
-                        type="number"
-                        inputProps={{ min: 0, step: 0.01 }}
-                        InputProps={{
-                          startAdornment: <InputAdornment position="start">$</InputAdornment>,
-                          endAdornment: <InputAdornment position="end">/ lb</InputAdornment>,
-                        }}
-                        error={!!errors.precioEstimadoVenta}
-                        helperText={errors.precioEstimadoVenta?.message}
-                      />
-                    )}
-                  />
-                </Grid>
+                {/* Input de precio estimado de venta eliminado, se calcula automáticamente por IA */}
 
                 {/* Cálculos automáticos */}
-                {(totalEstimadoCompra > 0 || totalEstimadoVenta > 0) && (
-                  <Grid item sx={{ width: '100%' }}>
-                    <Grid item sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                {(totalEstimadoCompra > 0) && (
+                  <Grid sx={{ width: '100%' }}>
+                    <Grid sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
                       <Typography variant="subtitle2" gutterBottom>
                         Cálculos Estimados
                       </Typography>
-                      <Grid item sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-                        <Grid item sx={{ width: { xs: '100%', md: '33.33%' } }}>
+                      <Grid sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                        <Grid sx={{ width: { xs: '100%', md: '50%' } }}>
                           <Typography variant="body2" color="text.secondary">
                             Total Estimado Compra
                           </Typography>
@@ -651,31 +673,12 @@ const OrderForm: React.FC = () => {
                             ${totalEstimadoCompra.toFixed(2)}
                           </Typography>
                         </Grid>
-                        <Grid item sx={{ width: { xs: '100%', md: '33.33%' } }}>
-                          <Typography variant="body2" color="text.secondary">
-                            Total Estimado Venta
-                          </Typography>
-                          <Typography variant="h6">
-                            ${totalEstimadoVenta.toFixed(2)}
-                          </Typography>
-                        </Grid>
-                        <Grid item sx={{ width: { xs: '100%', md: '33.33%' } }}>
-                          <Typography variant="body2" color="text.secondary">
-                            Margen Estimado
-                          </Typography>
-                          <Typography 
-                            variant="h6"
-                            color={margenEstimado > 0 ? 'success.main' : 'error.main'}
-                          >
-                            {margenEstimado.toFixed(1)}%
-                          </Typography>
-                        </Grid>
                       </Grid>
                     </Grid>
                   </Grid>
                 )}
 
-                <Grid item sx={{ width: '100%' }}>
+                <Grid sx={{ width: '100%' }}>
                   <Controller
                     name="condicionesIniciales"
                     control={control}
@@ -692,7 +695,7 @@ const OrderForm: React.FC = () => {
                   />
                 </Grid>
 
-                <Grid item sx={{ width: '100%' }}>
+                <Grid sx={{ width: '100%' }}>
                   <Controller
                     name="observaciones"
                     control={control}
@@ -713,8 +716,8 @@ const OrderForm: React.FC = () => {
           </Grid>
 
           {/* Botones de acción */}
-          <Grid item sx={{ width: '100%' }}>
-            <Grid item sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
+          <Grid sx={{ width: '100%' }}>
+            <Grid sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
               <Button
                 variant="outlined"
                 onClick={() => navigate('/orders')}
@@ -731,8 +734,8 @@ const OrderForm: React.FC = () => {
                 {submitLoading
                   ? 'Guardando...'
                   : isEdit
-                  ? 'Actualizar Pedido'
-                  : 'Crear Pedido'
+                    ? 'Actualizar Pedido'
+                    : 'Crear Pedido'
                 }
               </Button>
             </Grid>

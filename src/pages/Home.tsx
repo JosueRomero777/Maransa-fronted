@@ -4,10 +4,15 @@ import {
   Typography, 
   Box, 
   Paper, 
-  Grid, 
   Card,
   CardContent,
   CircularProgress,
+  Button,
+  TextField,
+  Alert,
+  IconButton,
+  InputAdornment,
+  Divider,
   useTheme,
   alpha
 } from '@mui/material';
@@ -19,7 +24,9 @@ import {
   Science as LabIcon,
   Assessment as AssessmentIcon,
   TrendingUp as TrendingUpIcon,
-  People as PeopleIcon
+  People as PeopleIcon,
+  Visibility as VisibilityIcon,
+  VisibilityOff as VisibilityOffIcon
 } from '@mui/icons-material';
 import { useAuth } from '../context';
 import { statsService, type DashboardStats } from '../services/stats.service';
@@ -35,8 +42,30 @@ interface DashboardStats {
 }
 
 export default function Home() {
-  const { user } = useAuth();
+  const { user, updateProfile, changePassword } = useAuth();
   const theme = useTheme();
+  const role = user?.role || '';
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
+  const [profileForm, setProfileForm] = useState({
+    name: user?.name || '',
+    email: user?.email || '',
+  });
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [showPassword, setShowPassword] = useState({
+    current: false,
+    next: false,
+    confirm: false,
+  });
   const [stats, setStats] = useState<DashboardStats>({
     totalProviders: 0,
     activeProviders: 0,
@@ -64,6 +93,82 @@ export default function Home() {
 
     loadStats();
   }, []);
+
+  useEffect(() => {
+    setProfileForm({
+      name: user?.name || '',
+      email: user?.email || '',
+    });
+  }, [user?.name, user?.email]);
+
+  const handleSaveProfile = async () => {
+    try {
+      setProfileSaving(true);
+      setProfileError(null);
+      setProfileSuccess(null);
+
+      if (!profileForm.name.trim() || !profileForm.email.trim()) {
+        setProfileError('El nombre y el correo son obligatorios');
+        return;
+      }
+
+      await updateProfile({
+        name: profileForm.name.trim(),
+        email: profileForm.email.trim(),
+      });
+
+      setProfileSuccess('Perfil actualizado correctamente');
+      setIsEditingProfile(false);
+    } catch (error: any) {
+      setProfileError(error?.message || 'No se pudo actualizar el perfil');
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const handleSavePassword = async () => {
+    try {
+      setPasswordSaving(true);
+      setPasswordError(null);
+      setPasswordSuccess(null);
+
+      if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
+        setPasswordError('Todos los campos de contraseña son obligatorios');
+        return;
+      }
+
+      if (passwordForm.newPassword.length < 6) {
+        setPasswordError('La nueva contraseña debe tener al menos 6 caracteres');
+        return;
+      }
+
+      if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+        setPasswordError('La confirmación de contraseña no coincide');
+        return;
+      }
+
+      await changePassword({
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+      });
+
+      setPasswordSuccess('Contraseña actualizada correctamente');
+      setPasswordForm({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: '',
+      });
+      setShowPassword({
+        current: false,
+        next: false,
+        confirm: false,
+      });
+    } catch (error: any) {
+      setPasswordError(error?.message || 'No se pudo cambiar la contraseña');
+    } finally {
+      setPasswordSaving(false);
+    }
+  };
 
   const statCards = [
     {
@@ -100,14 +205,87 @@ export default function Home() {
     }
   ];
 
+  const roleCardPermissions: Record<string, string[]> = {
+    ADMIN: ['providers', 'packagers', 'orders', 'users'],
+    GERENCIA: ['providers', 'packagers', 'orders'],
+    COMPRAS: ['providers', 'packagers', 'orders'],
+    LABORATORIO: ['providers', 'packagers'],
+    LOGISTICA: [],
+    CUSTODIA: [],
+    FACTURACION: [],
+  };
+
+  const cardKeys = ['providers', 'packagers', 'orders', 'users'];
+  const visibleCardKeys = roleCardPermissions[role] || [];
+  const visibleStatCards = statCards.filter((_, index) => visibleCardKeys.includes(cardKeys[index]));
+
   const quickLinks = [
-    { title: 'Gestión Comercial', icon: BusinessIcon, link: '/providers', description: 'Proveedores y Empacadoras' },
-    { title: 'Pedidos', icon: OrdersIcon, link: '/orders', description: 'Gestión de pedidos' },
-    { title: 'Laboratorio', icon: LabIcon, link: '/laboratory', description: 'Análisis y control' },
-    { title: 'Logística', icon: ShippingIcon, link: '/logistics', description: 'Transporte y distribución' },
-    { title: 'Predicciones IA', icon: AssessmentIcon, link: '/ai-predictions', description: 'Análisis predictivo' },
-    { title: 'Estadísticas', icon: TrendingUpIcon, link: '#', description: 'Reportes y gráficos' }
+    {
+      title: 'Gestión Comercial',
+      icon: BusinessIcon,
+      link: '/providers',
+      description: 'Proveedores y Empacadoras',
+      roles: ['ADMIN', 'COMPRAS', 'LABORATORIO', 'GERENCIA'],
+    },
+    {
+      title: 'Pedidos',
+      icon: OrdersIcon,
+      link: '/orders',
+      description: 'Gestión de pedidos',
+      roles: ['ADMIN', 'COMPRAS', 'GERENCIA'],
+    },
+    {
+      title: 'Laboratorio',
+      icon: LabIcon,
+      link: '/laboratory',
+      description: 'Análisis y control',
+      roles: ['ADMIN', 'LABORATORIO', 'GERENCIA'],
+    },
+    {
+      title: 'Logística',
+      icon: ShippingIcon,
+      link: '/logistics',
+      description: 'Transporte y distribución',
+      roles: ['ADMIN', 'LOGISTICA', 'GERENCIA'],
+    },
+    {
+      title: 'Custodia',
+      icon: ShippingIcon,
+      link: '/custody',
+      description: 'Seguimiento de custodia',
+      roles: ['ADMIN', 'CUSTODIA', 'LOGISTICA', 'GERENCIA'],
+    },
+    {
+      title: 'Recepciones',
+      icon: ShippingIcon,
+      link: '/receptions',
+      description: 'Control de recepción',
+      roles: ['ADMIN', 'LOGISTICA', 'GERENCIA'],
+    },
+    {
+      title: 'Facturación',
+      icon: AssessmentIcon,
+      link: '/invoices',
+      description: 'Facturas y comprobantes',
+      roles: ['ADMIN', 'FACTURACION', 'GERENCIA'],
+    },
+    {
+      title: 'Predicciones IA',
+      icon: AssessmentIcon,
+      link: '/ai-predictions',
+      description: 'Análisis predictivo',
+      roles: ['ADMIN', 'COMPRAS', 'GERENCIA'],
+    },
+    {
+      title: 'Estadísticas',
+      icon: TrendingUpIcon,
+      link: '/statistics',
+      description: 'Reportes y gráficos',
+      roles: ['ADMIN', 'GERENCIA'],
+    },
   ];
+
+  const visibleQuickLinks = quickLinks.filter((link) => link.roles.includes(role));
 
   return (
     <Container maxWidth="xl" sx={{ py: { xs: 2, sm: 3, md: 4 } }}>
@@ -139,6 +317,7 @@ export default function Home() {
       ) : (
         <>
           {/* Stats Cards */}
+          {visibleStatCards.length > 0 && (
           <Box sx={{ 
             mb: 4, 
             maxWidth: 1200, 
@@ -147,7 +326,7 @@ export default function Home() {
             gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
             gap: 2
           }}>
-            {statCards.map((card, index) => {
+            {visibleStatCards.map((card, index) => {
               const Icon = card.icon;
               return (
                 <Card 
@@ -195,6 +374,7 @@ export default function Home() {
               );
             })}
           </Box>
+          )}
 
           {/* Quick Access */}
           <Box sx={{ mb: 3, maxWidth: 1200, mx: 'auto' }}>
@@ -206,7 +386,7 @@ export default function Home() {
               gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
               gap: 2
             }}>
-              {quickLinks.map((link, index) => {
+              {visibleQuickLinks.map((link, index) => {
                 const Icon = link.icon;
                 return (
                   <Paper
@@ -255,42 +435,258 @@ export default function Home() {
             </Box>
           </Box>
 
-          {/* User Info Card */}
-          <Paper 
+          {/* User Info and Security */}
+          <Paper
             elevation={0}
-            sx={{ 
-              p: 3, 
+            sx={{
+              p: { xs: 2, sm: 3 },
               border: `1px solid ${theme.palette.divider}`,
               background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.02)} 0%, ${alpha(theme.palette.primary.main, 0.05)} 100%)`,
               maxWidth: 1200,
               mx: 'auto'
             }}
           >
-            <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+            <Typography variant="h6" sx={{ fontWeight: 600, textAlign: 'center', mb: 2 }}>
               Información de Usuario
             </Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
+
+            {profileError && (
+              <Alert severity="error" sx={{ mb: 2 }} onClose={() => setProfileError(null)}>
+                {profileError}
+              </Alert>
+            )}
+            {profileSuccess && (
+              <Alert severity="success" sx={{ mb: 2 }} onClose={() => setProfileSuccess(null)}>
+                {profileSuccess}
+              </Alert>
+            )}
+
+            {isEditingProfile ? (
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(260px, 1fr))' },
+                  gap: 2,
+                  maxWidth: 700,
+                  mx: 'auto',
+                  mb: 2,
+                }}
+              >
+                <TextField
+                  fullWidth
+                  label="Nombre"
+                  value={profileForm.name}
+                  onChange={(e) => setProfileForm((prev) => ({ ...prev, name: e.target.value }))}
+                />
+                <TextField
+                  fullWidth
+                  label="Correo"
+                  type="email"
+                  value={profileForm.email}
+                  onChange={(e) => setProfileForm((prev) => ({ ...prev, email: e.target.value }))}
+                />
+              </Box>
+            ) : (
+              <Box
+                sx={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  gap: { xs: 1.5, md: 2.5 },
+                  flexWrap: 'wrap',
+                  mb: 2,
+                }}
+              >
                 <Typography variant="body2" color="text.secondary">
                   <strong>Nombre:</strong> {user?.name}
                 </Typography>
-              </Grid>
-              <Grid item xs={12} sm={6}>
                 <Typography variant="body2" color="text.secondary">
                   <strong>Email:</strong> {user?.email}
                 </Typography>
-              </Grid>
-              <Grid item xs={12} sm={6}>
                 <Typography variant="body2" color="text.secondary">
                   <strong>Rol:</strong> {user?.role}
                 </Typography>
-              </Grid>
-              <Grid item xs={12} sm={6}>
                 <Typography variant="body2" color="text.secondary">
                   <strong>Estado:</strong> Activo
                 </Typography>
-              </Grid>
-            </Grid>
+              </Box>
+            )}
+
+            <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1, mb: 1 }}>
+              {isEditingProfile ? (
+                <>
+                  <Button
+                    variant="contained"
+                    onClick={handleSaveProfile}
+                    disabled={profileSaving}
+                  >
+                    {profileSaving ? 'Guardando...' : 'Guardar cambios'}
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    onClick={() => {
+                      setIsEditingProfile(false);
+                      setProfileError(null);
+                      setProfileSuccess(null);
+                      setPasswordError(null);
+                      setPasswordSuccess(null);
+                      setPasswordForm({
+                        currentPassword: '',
+                        newPassword: '',
+                        confirmPassword: '',
+                      });
+                      setShowPassword({
+                        current: false,
+                        next: false,
+                        confirm: false,
+                      });
+                      setProfileForm({
+                        name: user?.name || '',
+                        email: user?.email || '',
+                      });
+                    }}
+                    disabled={profileSaving}
+                  >
+                    Cancelar
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="outlined"
+                  onClick={() => {
+                    setIsEditingProfile(true);
+                    setPasswordError(null);
+                    setPasswordSuccess(null);
+                  }}
+                >
+                  Editar perfil
+                </Button>
+              )}
+            </Box>
+
+            {isEditingProfile && (
+              <>
+                <Divider sx={{ my: 3 }} />
+
+                <Typography variant="h6" sx={{ fontWeight: 600, textAlign: 'center', mb: 2 }}>
+                  Cambiar contraseña
+                </Typography>
+
+                {passwordError && (
+                  <Alert severity="error" sx={{ mb: 2 }} onClose={() => setPasswordError(null)}>
+                    {passwordError}
+                  </Alert>
+                )}
+                {passwordSuccess && (
+                  <Alert severity="success" sx={{ mb: 2 }} onClose={() => setPasswordSuccess(null)}>
+                    {passwordSuccess}
+                  </Alert>
+                )}
+
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(200px, 1fr))' },
+                    gap: 2,
+                    maxWidth: 900,
+                    mx: 'auto',
+                  }}
+                >
+                  <TextField
+                    fullWidth
+                    type={showPassword.current ? 'text' : 'password'}
+                    label="Contraseña actual"
+                    value={passwordForm.currentPassword}
+                    onChange={(e) => setPasswordForm((prev) => ({ ...prev, currentPassword: e.target.value }))}
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            onClick={() => setShowPassword((prev) => ({ ...prev, current: !prev.current }))}
+                            edge="end"
+                            aria-label="Mostrar u ocultar contraseña actual"
+                          >
+                            {showPassword.current ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+
+                  <TextField
+                    fullWidth
+                    type={showPassword.next ? 'text' : 'password'}
+                    label="Nueva contraseña"
+                    value={passwordForm.newPassword}
+                    onChange={(e) => setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))}
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            onClick={() => setShowPassword((prev) => ({ ...prev, next: !prev.next }))}
+                            edge="end"
+                            aria-label="Mostrar u ocultar nueva contraseña"
+                          >
+                            {showPassword.next ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+
+                  <TextField
+                    fullWidth
+                    type={showPassword.confirm ? 'text' : 'password'}
+                    label="Confirmar nueva contraseña"
+                    value={passwordForm.confirmPassword}
+                    onChange={(e) => setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            onClick={() => setShowPassword((prev) => ({ ...prev, confirm: !prev.confirm }))}
+                            edge="end"
+                            aria-label="Mostrar u ocultar confirmación de contraseña"
+                          >
+                            {showPassword.confirm ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </Box>
+
+                <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1, mt: 2 }}>
+                  <Button
+                    variant="contained"
+                    onClick={handleSavePassword}
+                    disabled={passwordSaving}
+                  >
+                    {passwordSaving ? 'Actualizando...' : 'Actualizar contraseña'}
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    onClick={() => {
+                      setPasswordError(null);
+                      setPasswordSuccess(null);
+                      setPasswordForm({
+                        currentPassword: '',
+                        newPassword: '',
+                        confirmPassword: '',
+                      });
+                      setShowPassword({
+                        current: false,
+                        next: false,
+                        confirm: false,
+                      });
+                    }}
+                    disabled={passwordSaving}
+                  >
+                    Limpiar
+                  </Button>
+                </Box>
+              </>
+            )}
           </Paper>
         </>
       )}

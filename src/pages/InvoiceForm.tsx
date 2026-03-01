@@ -60,9 +60,11 @@ export default function InvoiceForm() {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = Boolean(id);
+  const AUTO_RECEPTION_TAG = '[AUTO_RECEPCION]';
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isAutoReceptionInvoice, setIsAutoReceptionInvoice] = useState(false);
   const [packagers, setPackagers] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
 
@@ -101,6 +103,7 @@ export default function InvoiceForm() {
   const selectedPackager = Array.isArray(packagers)
     ? packagers.find((p) => p.id === parseInt(formData.packagerId))
     : undefined;
+  const onlyFormaPagoEditable = isEdit && isAutoReceptionInvoice;
 
   const getTipoIdentificacionComprador = (identificacion?: string) => {
     const cleaned = (identificacion || '').replace(/\D/g, '');
@@ -236,13 +239,17 @@ export default function InvoiceForm() {
         const hasReception = order.recepcion;
         const isAccepted = hasReception && order.recepcion.loteAceptado === true;
 
+        // Filtrar pedidos que ya tienen factura (que no esté anulada)
+        const hasInvoice = order.facturas && order.facturas.some((inv: any) => inv.estado !== 'ANULADA');
+
         console.log(`📦 Orden ${order.codigo || order.id}:`, {
           tieneRecepcion: !!hasReception,
           loteAceptado: order.recepcion?.loteAceptado,
+          tieneFactura: hasInvoice,
           recepcion: order.recepcion
         });
 
-        return isAccepted;
+        return isAccepted && !hasInvoice;
       });
 
       console.log('✅ Pedidos filtrados con recepción aceptada:', ordersWithAcceptedReception.length);
@@ -275,6 +282,7 @@ export default function InvoiceForm() {
       if (!response.ok) throw new Error('Error al cargar factura');
 
       const data = await response.json();
+      setIsAutoReceptionInvoice(Boolean(data?.esAutoRecepcion || data?.observaciones?.includes(AUTO_RECEPTION_TAG)));
       setFormData({
         packagerId: data.packagerId.toString(),
         orderId: data.orderId?.toString() || '',
@@ -390,6 +398,35 @@ export default function InvoiceForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (onlyFormaPagoEditable) {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${API_BASE_URL}/invoicing/invoices/${id}`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ formaPago: formData.formaPago }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Error al actualizar forma de pago');
+        }
+
+        navigate('/invoices');
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     if (!formData.packagerId) {
       setError('Debe seleccionar una empacadora');
       return;
@@ -496,6 +533,33 @@ export default function InvoiceForm() {
       )}
 
       <form onSubmit={handleSubmit}>
+        {onlyFormaPagoEditable && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Esta factura fue creada automáticamente desde recepción. Solo puedes editar la forma de pago.
+          </Alert>
+        )}
+
+        {onlyFormaPagoEditable ? (
+          <Paper sx={{ p: 3, mb: 3 }}>
+            <Typography variant="h6" gutterBottom>Editar Forma de Pago</Typography>
+            <Box sx={{ maxWidth: 360 }}>
+              <TextField
+                fullWidth
+                select
+                label="Forma de Pago"
+                value={formData.formaPago}
+                onChange={(e) => setFormData({ ...formData, formaPago: e.target.value })}
+              >
+                {FORMAS_PAGO.map((fp) => (
+                  <MenuItem key={fp.codigo} value={fp.codigo}>
+                    {fp.nombre}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Box>
+          </Paper>
+        ) : (
+          <>
         <Paper sx={{ p: 3, mb: 3 }}>
           <Typography variant="h6" gutterBottom>Información General</Typography>
 
@@ -837,6 +901,8 @@ export default function InvoiceForm() {
             </Grid>
           </Grid>
         </Paper>
+          </>
+        )}
 
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Button

@@ -2,7 +2,7 @@ import { apiService } from './api.service';
 import { API_BASE_URL } from '../config/api.config';
 
 // Microservicio Python a través del API Gateway
-const AI_SERVICE_URL = '/api/ai';
+const AI_SERVICE_URL = `${API_BASE_URL}/ai`;
 
 export interface AIPredictionRequest {
   tipo_producto: string;
