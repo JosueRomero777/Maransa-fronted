@@ -1022,12 +1022,12 @@ const AppLayout = React.memo(() => {
             </ProtectedRoute>
           } />
           <Route path="/invoices/:id/edit" element={
-            <ProtectedRoute requiredRoles={['ADMIN', 'GERENCIA']}>
+            <ProtectedRoute requiredRoles={['ADMIN', 'GERENCIA', 'FACTURACION']}>
               <InvoiceForm />
             </ProtectedRoute>
           } />
           <Route path="/invoices/config" element={
-            <ProtectedRoute requiredRoles={['ADMIN', 'GERENCIA']}>
+            <ProtectedRoute requiredRoles={['ADMIN', 'GERENCIA', 'FACTURACION']}>
               <InvoiceConfigPage />
             </ProtectedRoute>
           } />

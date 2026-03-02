@@ -28,10 +28,13 @@ const FORMAS_PAGO = [
   { codigo: '03', nombre: 'Débito Bancario' },
   { codigo: '04', nombre: 'Crédito Bancario' },
   { codigo: '15', nombre: 'Tarjeta Débito' },
-  { codigo: '16', nombre: 'Tarjeta Crédito' },
-  { codigo: '17', nombre: 'Dinero Electrónico' },
+  { codigo: '16', nombre: 'Dinero Electrónico' },
+  { codigo: '17', nombre: 'Tarjeta Prepago' },
+  { codigo: '18', nombre: 'Tarjeta Crédito' },
   { codigo: '19', nombre: 'Compensación' },
 ];
+
+const FORMAS_PAGO_CON_CREDITO = ['18'];
 
 // Códigos de IVA según SRI Ecuador
 // Nota: El camarón en Ecuador es producto de exportación, normalmente con 0% IVA
@@ -288,7 +291,7 @@ export default function InvoiceForm() {
         orderId: data.orderId?.toString() || '',
         fechaEmision: data.fechaEmision.split('T')[0],
         fechaVencimiento: data.fechaVencimiento?.split('T')[0] || '',
-        formaPago: data.formaPago || 'EFECTIVO',
+        formaPago: data.formaPago || '01',
         plazoCredito: data.plazoCredito || 0,
         observaciones: data.observaciones || '',
       });
@@ -403,6 +406,16 @@ export default function InvoiceForm() {
         setLoading(true);
         setError(null);
 
+        const isFormaCredito = FORMAS_PAGO_CON_CREDITO.includes(formData.formaPago);
+        const payload: any = {
+          formaPago: formData.formaPago,
+          plazoCredito: isFormaCredito ? (formData.plazoCredito || 0) : 0,
+        };
+
+        if (isFormaCredito && formData.fechaVencimiento) {
+          payload.fechaVencimiento = formData.fechaVencimiento;
+        }
+
         const token = localStorage.getItem('token');
         const response = await fetch(`${API_BASE_URL}/invoicing/invoices/${id}`, {
           method: 'PATCH',
@@ -410,7 +423,7 @@ export default function InvoiceForm() {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ formaPago: formData.formaPago }),
+          body: JSON.stringify(payload),
         });
 
         if (!response.ok) {
@@ -542,7 +555,9 @@ export default function InvoiceForm() {
         {onlyFormaPagoEditable ? (
           <Paper sx={{ p: 3, mb: 3 }}>
             <Typography variant="h6" gutterBottom>Editar Forma de Pago</Typography>
-            <Box sx={{ maxWidth: 360 }}>
+
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+              <Box sx={{ minWidth: 250, flex: { xs: '1 1 100%', sm: '1 1 calc(33.33% - 11px)' } }}>
               <TextField
                 fullWidth
                 select
@@ -556,6 +571,34 @@ export default function InvoiceForm() {
                   </MenuItem>
                 ))}
               </TextField>
+              </Box>
+
+              {FORMAS_PAGO_CON_CREDITO.includes(formData.formaPago) && (
+                <Box sx={{ minWidth: 180, flex: { xs: '1 1 100%', sm: '1 1 calc(33.33% - 11px)' } }}>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="Plazo Crédito (días)"
+                    value={formData.plazoCredito}
+                    onChange={(e) => setFormData({ ...formData, plazoCredito: parseInt(e.target.value) || 0 })}
+                    helperText="Requerido para pagos con plazo"
+                  />
+                </Box>
+              )}
+
+              {(formData.plazoCredito > 0 || ['18'].includes(formData.formaPago)) && (
+                <Box sx={{ minWidth: 180, flex: { xs: '1 1 100%', sm: '1 1 calc(33.33% - 11px)' } }}>
+                  <TextField
+                    fullWidth
+                    type="date"
+                    label="Fecha Vencimiento"
+                    value={formData.fechaVencimiento}
+                    onChange={(e) => setFormData({ ...formData, fechaVencimiento: e.target.value })}
+                    InputLabelProps={{ shrink: true }}
+                    helperText="Se calcula automáticamente con plazo"
+                  />
+                </Box>
+              )}
             </Box>
           </Paper>
         ) : (
@@ -611,7 +654,7 @@ export default function InvoiceForm() {
             </Box>
 
             {/* Fecha Vencimiento - Solo mostrar si hay plazo de crédito o forma de pago requiere */}
-            {(formData.plazoCredito > 0 || ['16', '17'].includes(formData.formaPago)) && (
+            {(formData.plazoCredito > 0 || ['18'].includes(formData.formaPago)) && (
               <Box sx={{ minWidth: 150, flex: { xs: '1 1 100%', sm: '1 1 calc(25% - 6px)', md: '1 1 calc(25% - 6px)' } }}>
                 <TextField
                   fullWidth
@@ -642,7 +685,7 @@ export default function InvoiceForm() {
             </Box>
 
             {/* Plazo Crédito - Solo para formas de pago de crédito */}
-            {['16', '17', '18', '19', '20', '21'].includes(formData.formaPago) && (
+            {FORMAS_PAGO_CON_CREDITO.includes(formData.formaPago) && (
               <Box sx={{ minWidth: 150, flex: { xs: '1 1 100%', sm: '1 1 calc(25% - 6px)', md: '1 1 calc(25% - 6px)' } }}>
                 <TextField
                   fullWidth

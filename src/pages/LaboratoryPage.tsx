@@ -32,6 +32,8 @@ import {
   TableBody,
   TableCell,
   TableRow,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material'
 import {
   Download as DownloadIcon,
@@ -97,6 +99,8 @@ const estadoColor = (estado: EstadoVisual) => {
 type FiltroEstado = EstadoLaboratorio | 'DESCARTADO' | ''
 
 const LaboratoryPage: React.FC = () => {
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const [items, setItems] = useState<Laboratory[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -532,8 +536,7 @@ const LaboratoryPage: React.FC = () => {
       </Card>
 
       {/* Lista de informes */}
-      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-        <Box sx={{ flex: selectedLab ? '0 0 50%' : '0 0 100%' }}>
+      <Box>
           {loading ? (
             <Box display="flex" justifyContent="center" py={6}>
               <CircularProgress />
@@ -543,8 +546,8 @@ const LaboratoryPage: React.FC = () => {
               display: 'grid',
               gridTemplateColumns: {
                 xs: '1fr',
-                sm: selectedLab ? '1fr' : 'repeat(2, 1fr)',
-                lg: selectedLab ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)'
+                sm: 'repeat(2, 1fr)',
+                lg: 'repeat(3, 1fr)'
               },
               gap: 2
             }}>
@@ -553,7 +556,10 @@ const LaboratoryPage: React.FC = () => {
                 return (
                   <Box key={lab.id}>
                     <Card
-                      onClick={() => setSelectedLab(lab)}
+                      onClick={() => {
+                        setSelectedLab(lab)
+                        setTabValue(0)
+                      }}
                       sx={{
                         cursor: 'pointer',
                         border: selectedLab?.id === lab.id ? '2px solid' : '1px solid #e0e0e0',
@@ -600,22 +606,31 @@ const LaboratoryPage: React.FC = () => {
               )}
             </Box>
           )}
-        </Box>
+      </Box>
 
-        {/* Detalle de informe seleccionado */}
+      {/* Detalle de informe seleccionado */}
+      <Dialog
+        open={Boolean(selectedLab)}
+        onClose={() => setSelectedLab(null)}
+        fullScreen={isMobile}
+        fullWidth
+        maxWidth="lg"
+      >
         {selectedLab && (
-          <Box sx={{ flex: '0 0 50%' }}>
-            <Card sx={{ position: 'sticky', top: 20 }}>
-              <CardHeader
-                title={`Detalle - Orden ${selectedLab.order?.codigo}`}
-                action={
-                  <IconButton size="small" onClick={() => setSelectedLab(null)}>
-                    <CloseIcon />
-                  </IconButton>
-                }
-              />
-              <Divider />
-              <CardContent>
+          <>
+            <DialogTitle sx={{ pr: 6 }}>
+              {`Detalle - Orden ${selectedLab.order?.codigo}`}
+              <IconButton
+                size="small"
+                onClick={() => setSelectedLab(null)}
+                sx={{ position: 'absolute', right: 8, top: 8 }}
+              >
+                <CloseIcon />
+              </IconButton>
+            </DialogTitle>
+            <DialogContent dividers>
+              <Card variant="outlined">
+                <CardContent>
                 <Tabs
                   value={tabValue}
                   onChange={(_, newValue) => setTabValue(newValue)}
@@ -849,11 +864,12 @@ const LaboratoryPage: React.FC = () => {
                     )}
                   </Stack>
                 </TabPanel>
-              </CardContent>
-            </Card>
-          </Box>
+                </CardContent>
+              </Card>
+            </DialogContent>
+          </>
         )}
-      </Box>
+      </Dialog>
 
       {/* Dialog: Crear nuevo informe */}
       <Dialog open={formDialog.open} onClose={() => setFormDialog({ open: false })} maxWidth="md" fullWidth>
